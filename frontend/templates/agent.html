@@ -540,13 +540,17 @@
                     <div class="result-header">
                         <div style="display:flex; align-items:center; gap:10px;">
                             <div class="status-pulse"></div>
-                            <span style="font-size:11px; font-weight:700; color:#fff; letter-spacing:1px; text-transform:uppercase;">Intelligence Synthesis</span>
+                            <span id="result-label" style="font-size:11px; font-weight:700; color:#fff; letter-spacing:1px; text-transform:uppercase;">Intelligence Synthesis</span>
                         </div>
                         <span id="finish-time" style="font-size:9px; color:#666;">--:--</span>
                     </div>
-
-                    <div id="result-text" class="result-content" style="color:#fff; font-size:14px; line-height:1.7; font-family:'Outfit', sans-serif;"></div>
                     
+                    <div id="agent-meta" style="font-size:9px; color:#937d65; margin-bottom:15px; font-family:'JetBrains Mono', monospace;"></div>
+
+                    <div id="result-text" class="result-content" style="color:#fff; font-size:14px; line-height:1.7; font-family:'Outfit', sans-serif; white-space: pre-wrap;"></div>
+                    
+                    <div id="consistency-note" style="margin-top:15px; padding:10px; background:rgba(255,165,0,0.1); border-left:3px solid orange; color:orange; font-size:11px; display:none;"></div>
+
                     <div class="metrics-grid">
                         <div class="metric-card">
                             <div id="m-faith" class="metric-value">--%</div>
@@ -917,18 +921,24 @@
                 .replace('⚠️ **Bu sistem yatırım tavsiyesi vermez.** Sunulan bilgiler yalnızca bilgi ve analiz amaçlıdır.', '')
                 .trim();
 
+            const updateSafe = (id, val, attr='textContent') => {
+                const el = document.getElementById(id);
+                if (el) el[attr] = val;
+            };
+
             const dec = data.decision || {};
             const srcs = (dec.sources_selected || []).join(' · ').toUpperCase();
-            document.getElementById('result-label').textContent =
-                ticker ? `${ticker} — Agent Response` : 'Agent Response';
-            document.getElementById('agent-meta').textContent =
-                [srcs, dec.time_horizon, `${data.iterations || 1} pass`, `${elapsed}s`].filter(Boolean).join(' · ');
-            document.getElementById('result-text').textContent = answer;
+            
+            updateSafe('result-label', ticker ? `${ticker} — Agent Response` : 'Agent Response');
+            updateSafe('agent-meta', [srcs, dec.time_horizon, `${data.iterations || 1} pass`, `${elapsed}s`].filter(Boolean).join(' · '));
+            updateSafe('result-text', answer);
 
             if (data.consistency_note) {
                 const cn = document.getElementById('consistency-note');
-                cn.textContent = data.consistency_note;
-                cn.style.display = 'block';
+                if (cn) {
+                    cn.textContent = data.consistency_note;
+                    cn.style.display = 'block';
+                }
             }
             if (data.sources && data.sources.length) {
                 const row = document.getElementById('sources-row');
