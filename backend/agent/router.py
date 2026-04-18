@@ -51,21 +51,30 @@ async def query(req: QueryRequest):
     ticker = req.ticker.upper() if req.ticker else None
     market_data = None
 
-    # Step 1: Market Data (Graceful Failure)
     if ticker:
         try:
             market_data = market_fetcher.get_summary(ticker)
-            # Find latest KAP for impact analaysis
+            if not market_data or 'returns' not in market_data:
+                market_data = {
+                    "last_price": "N/A", "daily_change": 0, 
+                    "returns": {"1w": "N/A", "1m": "N/A", "1y": "N/A"},
+                    "bist100_comparison_1y": 0, "avg_volume_6m": "0", "stability": "BİLİNMİYOR", "volatility": 0
+                }
             try:
                 docs = store.search(ticker, query="", limit=5)
                 k_dates = [d.metadata.get("date") for d in docs if d.metadata.get("source_type") == "kap" and d.metadata.get("date")]
-                if k_dates and market_data:
+                if k_dates and market_data and market_data.get("last_price") != "N/A":
                     latest = sorted(k_dates, reverse=True)[0]
                     impact = market_fetcher.get_price_after_event(ticker, latest)
                     if impact: market_data["kap_impact"] = {"date": latest, **impact}
             except: pass
         except Exception as e:
             logger.warning(f"Market fetch failed: {e}")
+            market_data = {
+                "last_price": "N/A", "daily_change": 0, 
+                "returns": {"1w": "N/A", "1m": "N/A", "1y": "N/A"},
+                "bist100_comparison_1y": 0, "avg_volume_6m": "0", "stability": "BİLİNMİYOR", "volatility": 0
+            }
 
     # Step 2: Context Construction
     ctx = ""
