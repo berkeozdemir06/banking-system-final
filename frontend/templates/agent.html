@@ -933,7 +933,7 @@
             await new Promise(r => setTimeout(r, 500));
 
             // NEW: Populate Market Dashboard
-            if (data.market_data) {
+            if (data.market_data && Object.keys(data.market_data).length > 0 && data.market_data.returns) {
                 const md = data.market_data;
                 document.getElementById('market-dashboard').style.display = 'block';
                 document.getElementById('m-price').textContent = md.last_price + " TL";
