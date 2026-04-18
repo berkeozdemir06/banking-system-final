@@ -941,18 +941,21 @@
                 }
             }
             if (data.sources && data.sources.length) {
-                const row = document.getElementById('sources-row');
-                row.innerHTML = '';
-                const seen = new Set();
-                data.sources.forEach(s => {
-                    if (!seen.has(s.source_type)) {
-                        seen.add(s.source_type);
-                        const chip = document.createElement('span');
-                        chip.className = 'src-chip';
-                        chip.textContent = s.source_type;
-                        row.appendChild(chip);
-                    }
-                });
+                const row = document.getElementById('citation-row');
+                if (row) {
+                    row.innerHTML = '';
+                    const seen = new Set();
+                    data.sources.forEach(s => {
+                        const s_type = s.source_type || 'news';
+                        if (!seen.has(s_type)) {
+                            seen.add(s_type);
+                            const chip = document.createElement('span');
+                            chip.className = `citation-chip ${s_type === 'kap' ? 'kap' : 'news'}`;
+                            chip.textContent = s_type.toUpperCase();
+                            row.appendChild(chip);
+                        }
+                    });
+                }
             }
             resultArea.style.display = 'block';
             resultArea.scrollIntoView({ behavior: 'smooth' });
