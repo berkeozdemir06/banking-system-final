@@ -7,7 +7,9 @@
     <meta name="theme-color" content="#000000">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=Open+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,700;1,400&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <!-- html2pdf for Professional Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -454,33 +456,48 @@
             <!-- Thinking Terminal -->
             <div id="thinking-terminal" class="thinking-terminal"></div>
 
-            <!-- Result -->
-            <div class="result-area" id="result-area">
-                <hr class="result-divider">
-                <div class="result-header">
-                    <div class="result-label" id="result-label">Agent Response</div>
-                    <div class="agent-meta" id="agent-meta"></div>
-                </div>
-                <div class="result-text" id="result-text"></div>
-                <div class="consistency-note" id="consistency-note" style="display:none;"></div>
-                <div class="sources-row" id="sources-row"></div>
+                <!-- Export Button -->
+                <button class="export-btn" id="export-pdf-btn" onclick="exportToPDF()" style="width:100%;background:#f0f0f0;color:#000;border:1px solid #ddd;padding:12px;margin-top:20px;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;gap:8px;">
+                    📄 DOWNLOAD RESEARCH REPORT (PDF)
+                </button>
 
-                <!-- Intelligence Metrics Dashboard -->
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <div class="metric-value" id="m-faith">--%</div>
-                        <div class="metric-label">Faithfulness</div>
-                        <div class="metric-status">● Verified</div>
+                <!-- Hidden Report Template (For PDF generation) -->
+                <div id="pdf-report-template" style="display:none; padding:40px; background:#fff; color:#000; font-family:'Outfit', sans-serif;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #000; padding-bottom:15px; margin-bottom:30px;">
+                        <div>
+                            <h1 style="font-family:'Playfair Display', serif; font-size:32px; margin:0;">ÖZAS</h1>
+                            <p style="font-size:10px; text-transform:uppercase; letter-spacing:2px; margin:0; color:#666;">Equity Intelligence Report</p>
+                        </div>
+                        <div style="text-align:right;">
+                            <p style="font-size:12px; margin:0; font-weight:700;" id="pdf-ticker-val">TICKER</p>
+                            <p style="font-size:10px; margin:0; color:#888;" id="pdf-date-val">DATE</p>
+                        </div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="m-prec">--%</div>
-                        <div class="metric-label">Precision</div>
-                        <div class="metric-status">● Optimized</div>
+                    
+                    <h2 style="font-size:14px; border-bottom:1px solid #ddd; padding-bottom:5px; text-transform:uppercase; letter-spacing:1px;">Summary Analysis</h2>
+                    <div id="pdf-content-val" style="font-size:13px; line-height:1.7; margin-bottom:30px;"></div>
+
+                    <h2 style="font-size:14px; border-bottom:1px solid #ddd; padding-bottom:5px; text-transform:uppercase; letter-spacing:1px;">Intelligence Metrics</h2>
+                    <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; margin-bottom:30px;">
+                        <div style="border:1px solid #eee; padding:10px; text-align:center;">
+                            <div style="font-size:18px; font-weight:700;" id="pdf-faith-val">--%</div>
+                            <div style="font-size:8px; text-transform:uppercase; color:#888;">Faithfulness</div>
+                        </div>
+                        <div style="border:1px solid #eee; padding:10px; text-align:center;">
+                            <div style="font-size:18px; font-weight:700;" id="pdf-prec-val">--%</div>
+                            <div style="font-size:8px; text-transform:uppercase; color:#888;">Precision</div>
+                        </div>
+                        <div style="border:1px solid #eee; padding:10px; text-align:center;">
+                            <div style="font-size:18px; font-weight:700;" id="pdf-lat-val">--s</div>
+                            <div style="font-size:8px; text-transform:uppercase; color:#888;">Latency</div>
+                        </div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="m-latency">--s</div>
-                        <div class="metric-label">Reasoning</div>
-                        <div class="metric-status">● Groq LPU</div>
+
+                    <div style="background:#f9f9f9; padding:20px; border-radius:5px; font-size:10px; color:#555; line-height:1.5;">
+                        <strong>REGULATORY DISCLAIMER:</strong> This report is generated by the ÖZAS BIST Equity Intelligence Agent for academic simulation purposes only. The information provided does not constitute investment advice, financial guidance, or any buy/sell recommendation. ÖZAS does not guarantee the accuracy of AI-generated synthesis. Consult a licensed financial advisor before making any investment decisions.
+                    </div>
+                    <div style="text-align:center; font-size:9px; color:#aaa; margin-top:50px;">
+                        Page 1 of 1 | ÖZAS Finance Intelligent Systems Project v4.0
                     </div>
                 </div>
 
@@ -789,6 +806,41 @@
         } finally {
             btnText.innerText = 'RUN INTELLIGENCE ANALYSIS';
             btn.disabled = false;
+        }
+    }
+
+    async function exportToPDF() {
+        const ticker = getTicker() || "BIST";
+        const content = document.getElementById('result-text').innerText;
+        const faith = document.getElementById('m-faith').innerText;
+        const prec = document.getElementById('m-prec').innerText;
+        const latency = document.getElementById('m-latency').innerText;
+        
+        // Populate template
+        document.getElementById('pdf-ticker-val').innerText = ticker;
+        document.getElementById('pdf-date-val').innerText = new Date().toLocaleDateString();
+        document.getElementById('pdf-content-val').innerText = content;
+        document.getElementById('pdf-faith-val').innerText = faith;
+        document.getElementById('pdf-prec-val').innerText = prec;
+        document.getElementById('pdf-lat-val').innerText = latency;
+
+        const element = document.getElementById('pdf-report-template');
+        element.style.display = 'block';
+
+        const opt = {
+            margin:       0.5,
+            filename:     `OZAS_Report_${ticker}_${new Date().toISOString().slice(0,10)}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
+
+        try {
+            await html2pdf().set(opt).from(element).save();
+        } catch (err) {
+            alert("PDF Export failed: " + err.message);
+        } finally {
+            element.style.display = 'none';
         }
     }
 </script>
