@@ -89,7 +89,33 @@
             color: #666; letter-spacing: 0.5px; padding: 0;
             transition: color 0.2s; font-weight: 500;
         }
-        .back-btn:hover { color: #000; }
+        /* ── Market Dashboard ── */
+        .market-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+        .m-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s, background 0.2s;
+        }
+        .m-card:hover { 
+            background: rgba(255,255,255,0.08);
+            transform: translateY(-2px);
+        }
+        .m-label { font-size: 9px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .m-value { font-size: 18px; font-weight: 700; color: #000; font-family: 'Outfit', sans-serif; }
+        .m-sub { font-size: 10px; color: #666; margin-top: 2px; }
+        .val-up { color: #2ecc71 !important; }
+        .val-down { color: #e74c3c !important; }
+        @media (max-width: 600px) {
+            .market-grid { grid-template-columns: repeat(2, 1fr); }
+        }
         .logo-center { flex: 1; text-align: center; }
         .logo-jp {
             font-family: 'Playfair Display', serif;
@@ -528,7 +554,37 @@
 
             <!-- Result Area -->
             <div id="result-area" class="result-area" style="display:none; margin-top:30px;">
+                
                 <div class="result-card">
+                    
+                    <!-- Market Intelligence Dashboard (Inside Card for PDF) -->
+                    <div id="market-dashboard" class="market-dashboard" style="display:none; margin-bottom: 25px; padding: 0 40px;">
+                        <div class="section-label" style="color: #937d65; margin-bottom: 12px; font-size: 10px; text-align: left;">Numerical Intelligence — Global Market Context</div>
+                        <div class="market-grid">
+                            <div class="m-card">
+                                <span class="m-label">Market Spot Price</span>
+                                <span class="m-value" id="m-price">--</span>
+                                <span class="m-sub" id="m-change">--</span>
+                            </div>
+                            <div class="m-card">
+                                <span class="m-label">Relative vs BIST100</span>
+                                <span class="m-value" id="m-returns">--</span>
+                                <span class="m-sub" id="m-relative">--</span>
+                            </div>
+                            <div class="m-card">
+                                <span class="m-label">KAP Reaction</span>
+                                <span class="m-value" id="m-impact" style="font-size: 16px;">--</span>
+                                <span class="m-sub" id="m-impact-date">No event</span>
+                            </div>
+                            <div class="m-card">
+                                <span class="m-label">Stability & Vol</span>
+                                <span class="m-value" id="m-stability" style="font-size: 14px; letter-spacing: 1px;">--</span>
+                                <span class="m-sub" id="m-volatility">--</span>
+                            </div>
+                        </div>
+                        <hr class="divider" style="margin: 20px 0; opacity: 0.1;">
+                    </div>
+
                     <div class="result-header">
                         <div style="display:flex; align-items:center; gap:10px;">
                             <div class="status-pulse"></div>
@@ -875,6 +931,38 @@
 
             addLog(`Intelligence report generated successfully.`, '✅');
             await new Promise(r => setTimeout(r, 500));
+
+            // NEW: Populate Market Dashboard
+            if (data.market_data) {
+                const md = data.market_data;
+                document.getElementById('market-dashboard').style.display = 'block';
+                document.getElementById('m-price').textContent = md.last_price + " TL";
+                
+                const changeEl = document.getElementById('m-change');
+                changeEl.textContent = (md.daily_change > 0 ? "+" : "") + md.daily_change + "% Today";
+                changeEl.className = "m-sub " + (md.daily_change >= 0 ? "val-up" : "val-down");
+
+                document.getElementById('m-returns').textContent = md.returns["1y"] + "%";
+                const relEl = document.getElementById('m-relative');
+                relEl.textContent = (md.bist100_comparison_1y > 0 ? "Outperforming Index" : "Underperforming Index");
+                relEl.className = "m-sub " + (md.bist100_comparison_1y >= 0 ? "val-up" : "val-down");
+
+                // KAP Reaction
+                if (md.kap_impact) {
+                    const ki = md.kap_impact;
+                    document.getElementById('m-impact').textContent = (ki.stock_reaction > 0 ? "+" : "") + ki.stock_reaction + "%";
+                    document.getElementById('m-impact').className = "m-value " + (ki.relative_reaction >= 0 ? "val-up" : "val-down");
+                    document.getElementById('m-impact-date').textContent = "Next day after " + ki.date;
+                } else {
+                    document.getElementById('m-impact').textContent = "N/A";
+                    document.getElementById('m-impact-date').textContent = "No recent data";
+                }
+
+                document.getElementById('m-stability').textContent = md.stability;
+                document.getElementById('m-volatility').textContent = "Vol: " + md.volatility + "%";
+            } else {
+                document.getElementById('market-dashboard').style.display = 'none';
+            }
 
             // Populate Metrics
             const faith = Math.floor(92 + Math.random() * 6);
