@@ -53,52 +53,54 @@ class KAPScraper:
     def fetch_disclosures(
         self,
         ticker: str,
-        limit: int = 30,
+        limit: int = 40,
         disc_type: Optional[str] = None,
     ) -> list[dict]:
         """
         Belirtilen ticker için KAP bildirimlerini Google News RSS üzerinden çeker.
-
-        Args:
-            ticker:    Hisse kodu (örn. "ASELS", "THYAO")
-            limit:     Maksimum bildirim sayısı
-            disc_type: Şu an kullanılmıyor (ilerleyen versiyonlar için)
-
-        Returns:
-            List of document dicts with mandatory metadata schema
+        Depth artırıldı ve spesifik atama sorguları eklendi.
         """
-        logger.info(f"Fetching KAP disclosures for {ticker} via Google News RSS (limit={limit})")
+        logger.info(f"Targeted KAP search for {ticker} (Depth: {limit})...")
         t_up = ticker.upper()
-
-        # Birden fazla arama sorgusu ile kapsamlı veri çek
+        
+        # Çok açılı arama sorguları — kritik haberleri kaçırmamak için
         queries = [
             f'"{t_up}" KAP bildirimi',
-            f'"{t_up}" KAP özel durum',
-            f'"{t_up}" borsa bildirim',
+            f'"{t_up}" atama müdür KAP',
+            f'"{t_up}" yönetim kurulu değişikliği KAP',
+            f'"{t_up}" özel durum açıklaması atama'
         ]
 
         docs = []
         seen_titles = set()
+        seen_urls = set()
 
         for query in queries:
             if len(docs) >= limit:
                 break
             fetched = self._fetch_google_news_rss(query, ticker, seen_titles)
-            docs.extend(fetched)
+            for f in fetched:
+                if f['url'] not in seen_urls:
+                    docs.append(f)
+                    seen_urls.add(f['url'])
 
-        # Google News yeterli sonuç vermediyse DuckDuckGo'ya düş
-        if len(docs) < 3:
-            logger.warning(f"Google News returned only {len(docs)} results for {ticker}, trying DDG fallback")
+        # Sonuçlar azsa DuckDuckGo yedeği
+        if len(docs) < 5:
+            logger.warning(f"Low results for {ticker}, trying DDG fallback")
             ddg_docs = self._fetch_via_ddg(ticker, limit - len(docs), seen_titles)
-            docs.extend(ddg_docs)
+            for d in ddg_docs:
+                if d['url'] not in seen_urls:
+                    docs.append(d)
+                    seen_urls.add(d['url'])
 
+        # Tarihe göre sırala (En yeni en üstte)
+        docs.sort(key=lambda x: x.get('date', '0000-00-00'), reverse=True)
         docs = docs[:limit]
 
         if not docs:
             logger.warning(f"All sources failed for {ticker}, generating structural mock")
             docs = self._make_fallback(ticker)
 
-        logger.info(f"Fetched {len(docs)} KAP disclosures for {ticker}")
         self._save(ticker, docs)
         return docs
 
