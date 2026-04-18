@@ -509,17 +509,9 @@
 
             <hr class="divider">
 
-            <!-- Step 3: Query -->
+             <!-- Step 3: Query -->
             <div class="section-label" style="margin-top:20px;">Step 3 — Intelligence Query</div>
             
-            <div class="query-presets">
-                <button class="preset-btn" onclick="setPrompt('Son 6 aydaki Yönetim Kurulu ve Üst Yönetim değişikliklerini listele ve analiz et')">👔 Yönetim Değişiklikleri</button>
-                <button class="preset-btn" onclick="setPrompt('Analyze recent board decisions vs news sentiment')">🛡️ Consistency Check</button>
-                <button class="preset-btn" onclick="setPrompt('How has the strategic narrative evolved in the last year?')">📈 Narrative Evolution</button>
-                <button class="preset-btn" onclick="setPrompt('What are the common brokerage themes and consensus?')">🧬 Common Themes</button>
-                <button class="preset-btn" onclick="setPrompt('Analyze the latest management and board changes')">🎓 Academic View</button>
-            </div>
-
             <textarea class="question-area" id="question-in" rows="3"
                 placeholder="e.g. Do recent news articles contradict or confirm the official KAP disclosures?..."
                 onkeydown="if(event.key==='Enter' && event.ctrlKey) runQuery()"></textarea>
