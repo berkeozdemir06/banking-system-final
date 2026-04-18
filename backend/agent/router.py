@@ -85,6 +85,23 @@ async def get_agent_status():
     }
 
 
+@router.get("/status")
+async def status():
+    """Sistemin sağlık durumunu ve veritabanı istatistiklerini döndürür."""
+    store = get_store()
+    stats = store.get_stats()
+    
+    return {
+        "status": "online",
+        "database": stats,
+        "environment": {
+            "groq_api_key": bool(os.getenv("GROQ_API_KEY")),
+            "firecrawl_api_key": bool(os.getenv("FIRECRAWL_API_KEY")),
+            "nomic_api_key": bool(os.getenv("NOMIC_API_KEY")),
+        },
+        "version": "4.0.0-agentic"
+    }
+
 @router.post("/query", response_model=QueryResponse)
 async def query(req: QueryRequest):
     """Ana RAG endpoint — soru sor, kaynaklı cevap al. BISTAgent kullanılır."""

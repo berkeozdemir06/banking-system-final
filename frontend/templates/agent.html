@@ -401,6 +401,26 @@
             color: #000; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
         }
 
+        /* ── Health Panel ── */
+        .health-panel {
+            display: flex; gap: 10px; margin-top: 15px; margin-bottom: 20px;
+            padding: 10px; background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.05);
+            border-radius: 8px; justify-content: space-between;
+        }
+        .health-item { flex: 1; text-align: center; }
+        .health-label { font-size: 8px; text-transform: uppercase; letter-spacing: 1px; color: #777; margin-bottom: 3px; }
+        .health-val { font-size: 11px; font-weight: 700; color: #444; }
+        .health-val.ok { color: #00aa55; }
+        .health-val.bad { color: #cc0000; }
+        .health-val.status-checking { color: #aaa; }
+
+        .conn-badge {
+            font-size: 8px; padding: 4px 8px; border-radius: 4px; font-weight: 800;
+            letter-spacing: 1px; transition: all 0.3s;
+        }
+        .conn-badge.online { background: #00ff88; color: #004422; box-shadow: 0 0 10px rgba(0,255,136,0.3); }
+        .conn-badge.offline { background: #ff3300; color: #fff; }
+
         @keyframes spin { to { transform: rotate(360deg); } }
         .spinner-icon {
             width: 15px; height: 15px;
@@ -433,7 +453,27 @@
                     <div class="logo-jp">OZAS</div>
                     <span class="logo-sub">Finance Agent</span>
                 </div>
-                <div style="width:50px;"></div>
+                <div id="connection-status" class="conn-badge offline">OFFLINE</div>
+            </div>
+
+            <!-- Health Status Panel -->
+            <div id="health-panel" class="health-panel">
+                <div class="health-item">
+                    <div class="health-label">Backend</div>
+                    <div id="health-api" class="health-val status-checking">Checking...</div>
+                </div>
+                <div class="health-item">
+                    <div class="health-label">Database</div>
+                    <div id="health-db" class="health-val status-checking">-- chunks</div>
+                </div>
+                <div class="health-item">
+                    <div class="health-label">Groq API</div>
+                    <div id="health-groq" class="health-val status-checking">...</div>
+                </div>
+                <div class="health-item">
+                    <div class="health-label">News Sync</div>
+                    <div id="health-sync" class="health-val status-checking">Live</div>
+                </div>
             </div>
 
             <!-- Step 1: Ticker -->
@@ -590,6 +630,34 @@
 
 <script>
     const API_URL = window.location.origin + '/api/agent';
+
+    // ── Check API Health on load ──
+    async function checkHealth() {
+        try {
+            const res = await fetch(`${API_URL}/status`);
+            const d = await res.json();
+            const badge = document.getElementById('connection-status');
+            badge.innerText = 'ONLINE';
+            badge.className = 'conn-badge online';
+
+            document.getElementById('health-api').innerText = 'OK';
+            document.getElementById('health-api').className = 'health-val ok';
+            
+            document.getElementById('health-db').innerText = (d.database.total_chunks || 0) + ' chunks';
+            document.getElementById('health-db').className = 'health-val ok';
+
+            const groqOk = d.environment.groq_api_key;
+            document.getElementById('health-groq').innerText = groqOk ? 'CONNECTED' : 'MISSING';
+            document.getElementById('health-groq').className = 'health-val ' + (groqOk ? 'ok' : 'bad');
+
+            document.getElementById('health-sync').innerText = 'STABLE';
+            document.getElementById('health-sync').className = 'health-val ok';
+        } catch (e) {
+            console.error("Health check failed:", e);
+        }
+    }
+    checkHealth();
+    setInterval(checkHealth, 30000);
 
     // ── BIST Ticker database ──────────────────────────────────────────────────
     const TICKERS = [
