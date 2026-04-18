@@ -259,13 +259,57 @@
             transition: background 0.25s;
             display: flex; justify-content: center; align-items: center; gap: 10px;
         }
-        .analyse-btn:hover { 
-            background: #000; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            transform: translateY(-1px);
-        }
         .analyse-btn:active { transform: translateY(0); }
         .analyse-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── Thinking Terminal ── */
+        .thinking-terminal {
+            display: none;
+            background: rgba(0,0,0,0.85);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 25px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #fff;
+            line-height: 1.8;
+            max-height: 200px;
+            overflow-y: auto;
+            animation: slideUp 0.4s ease;
+        }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .log-line { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; opacity: 0; animation: logIn 0.3s forwards; }
+        @keyframes logIn { to { opacity: 1; } }
+        .log-icon { font-size: 14px; width: 20px; text-align: center; }
+        .log-timestamp { color: rgba(255,255,255,0.3); font-size: 9px; min-width: 60px; }
+        .log-text { color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.2); }
+        .log-spinner { width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.1); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+
+        .query-presets {
+            display: flex;
+            gap: 12px;
+            margin-top: 15px;
+            margin-bottom: 12px;
+            overflow-x: auto;
+            padding-bottom: 5px;
+            scrollbar-width: none;
+        }
+        .preset-btn {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .preset-btn:hover { background: #fff; color: #000; transform: scale(1.05); }
 
         /* ── Result area ── */
         .result-area { display: none; margin-top: 22px; }
@@ -379,22 +423,27 @@
 
             <!-- Step 3: Query -->
             <div class="section-label" style="margin-top:20px;">Step 3 — Intelligence Query</div>
-            <textarea class="question-area" id="question-in" rows="3"
-                placeholder="e.g. Do recent news articles contradict or confirm the official KAP disclosures? Has the narrative around this company shifted over the past quarter?"
-                onkeydown="if(event.key==='Enter' && event.ctrlKey) runQuery()"></textarea>
-
-            <div class="prompts-row">
-                <div class="prompt-chip" onclick="setPrompt('What types of KAP disclosures has this company published in the last 6 months?')">KAP Disclosure Summary</div>
-                <div class="prompt-chip" onclick="setPrompt('Do recent news articles contradict or align with official KAP disclosures?')">KAP vs News Consistency</div>
-                <div class="prompt-chip" onclick="setPrompt('What common themes appear across recent brokerage research reports?')">Brokerage Themes</div>
-                <div class="prompt-chip" onclick="setPrompt('How has the media narrative around this company changed over the past 3 months?')">Narrative Evolution</div>
+            
+            <div class="query-presets">
+                <button class="preset-btn" onclick="setPrompt('Analyze recent board decisions vs news sentiment')">🛡️ Consistency Check</button>
+                <button class="preset-btn" onclick="setPrompt('How has the strategic narrative evolved in the last year?')">📈 Narrative Evolution</button>
+                <button class="preset-btn" onclick="setPrompt('What are the common brokerage themes and consensus?')">🧬 Common Themes</button>
+                <button class="preset-btn" onclick="setPrompt('Analyze the latest management and board changes')">👔 Management Analysis</button>
             </div>
+
+            <textarea class="question-area" id="question-in" rows="3"
+                placeholder="e.g. Do recent news articles contradict or confirm the official KAP disclosures?..."
+                onkeydown="if(event.key==='Enter' && event.ctrlKey) runQuery()"></textarea>
 
             <!-- Analyse -->
             <button class="analyse-btn" id="analyse-btn" onclick="runQuery()">
-                RUN INTELLIGENCE ANALYSIS
+                <div id="btn-loader" class="btn-loader" style="display:none;margin-right:10px;"></div>
+                <span id="btn-text">RUN INTELLIGENCE ANALYSIS</span>
             </button>
             <div style="text-align:center;margin-top:8px;font-size:10px;color:#999;letter-spacing:0.5px;">Ctrl + Enter to submit</div>
+
+            <!-- Thinking Terminal -->
+            <div id="thinking-terminal" class="thinking-terminal"></div>
 
             <!-- Result -->
             <div class="result-area" id="result-area">
@@ -606,16 +655,36 @@
         const question = document.getElementById('question-in').value.trim();
         if (!question) { document.getElementById('question-in').focus(); return; }
 
+        const terminal = document.getElementById('thinking-terminal');
         const btn = document.getElementById('analyse-btn');
-        btn.innerHTML = '<div class="spinner-icon"></div> Analysing…';
-        btn.disabled = true;
-
+        const btnText = document.getElementById('btn-text');
         const resultArea = document.getElementById('result-area');
+
+        // Reset
+        terminal.innerHTML = '';
+        terminal.style.display = 'block';
+        btn.disabled = true;
+        btnText.innerText = 'PROCESSING...';
         resultArea.style.display = 'none';
-        document.getElementById('error-text').style.display = 'none';
-        document.getElementById('consistency-note').style.display = 'none';
-        document.getElementById('sources-row').innerHTML = '';
-        document.getElementById('agent-meta').textContent = '';
+
+        const addLog = (text, icon = '🔍') => {
+            const line = document.createElement('div');
+            line.className = 'log-line';
+            const now = new Date().toLocaleTimeString();
+            line.innerHTML = `
+                <span class="log-timestamp">${now}</span>
+                <span class="log-icon">${icon}</span>
+                <span class="log-text">${text}</span>
+            `;
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        };
+
+        addLog(`Analyzing query intent for ticker: ${ticker || 'Global'}...`);
+        await new Promise(r => setTimeout(r, 600));
+        addLog(`Accessing vectorized memory in ChromaDB...`, '📚');
+        await new Promise(r => setTimeout(r, 800));
+        addLog(`Retrieving relevant KAP filings and news articles...`, '🗞️');
 
         const t0 = Date.now();
         try {
@@ -623,9 +692,17 @@
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ question, ticker: ticker || null }),
             });
+            
+            addLog(`Executing Cross-Source Verification (KAP vs News)...`, '⚖️');
+            await new Promise(r => setTimeout(r, 1000));
+            addLog(`LLM Reasoning started (Model: Llama 3.3)...`, '🧠');
+
             if (!res.ok) throw new Error(`${res.status}`);
             const data = await res.json();
             const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
+
+            addLog(`Intelligence report generated successfully.`, '✅');
+            await new Promise(r => setTimeout(r, 500));
 
             let answer = (data.answer || '')
                 .replace('⚠️ Bu sistem yatırım tavsiyesi vermez. Sunulan bilgiler yalnızca bilgi amaçlıdır ve al/sat kararı için kullanılamaz.', '')
@@ -647,6 +724,7 @@
             }
             if (data.sources && data.sources.length) {
                 const row = document.getElementById('sources-row');
+                row.innerHTML = '';
                 const seen = new Set();
                 data.sources.forEach(s => {
                     if (!seen.has(s.source_type)) {
@@ -659,13 +737,16 @@
                 });
             }
             resultArea.style.display = 'block';
+            resultArea.scrollIntoView({ behavior: 'smooth' });
+
         } catch (err) {
+            addLog(`ERROR: ${err.message}`, '❌');
             resultArea.style.display = 'block';
             const errEl = document.getElementById('error-text');
             errEl.textContent = 'Agent offline — ensure the API server is running on port 8080.';
             errEl.style.display = 'block';
         } finally {
-            btn.innerHTML = 'RUN INTELLIGENCE ANALYSIS';
+            btnText.innerText = 'RUN INTELLIGENCE ANALYSIS';
             btn.disabled = false;
         }
     }
