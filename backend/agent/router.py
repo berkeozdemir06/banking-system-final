@@ -81,19 +81,7 @@ async def get_agent_status():
     return {
         "status": "online",
         "message": "OZAS Finance Agent is operational.",
-        "vectorstore": stats
-    }
-
-
-@router.get("/status")
-async def status():
-    """Sistemin sağlık durumunu ve veritabanı istatistiklerini döndürür."""
-    store = get_store()
-    stats = store.get_stats()
-    
-    return {
-        "status": "online",
-        "database": stats,
+        "vectorstore": stats,
         "environment": {
             "groq_api_key": bool(os.getenv("GROQ_API_KEY")),
             "firecrawl_api_key": bool(os.getenv("FIRECRAWL_API_KEY")),
@@ -122,12 +110,42 @@ async def query(req: QueryRequest):
     store = get_store()
     agent = BISTAgent(store=store)
     try:
-        # Check if store has any documents at all for context
-        stats = store.get_stats()
-        if stats.get("total_chunks", 0) == 0:
-            logger.warning("Query received but VectorStore is empty.")
-            # We continue anyway, the agent will handle empty context
-            
+        # ── Auto-Ingest: Ticker için veri yoksa otomatik ingest et ──────────
+        ticker = req.ticker
+        if ticker:
+            stats = store.get_stats()
+            ticker_count = stats.get("by_ticker", {}).get(ticker.upper(), 0)
+            if ticker_count == 0:
+                logger.info(f"No data found for {ticker} — triggering auto-ingest...")
+                try:
+                    from backend.agent.ingestion.kap_scraper import KAPScraper
+                    from backend.agent.ingestion.rss_scraper import RSSNewsScraper
+                    from backend.agent.embeddings.embedder import embed_documents
+
+                    # KAP haberleri (Google News RSS)
+                    kap = KAPScraper()
+                    kap_docs = kap.fetch_disclosures(ticker, limit=20)
+                    if kap_docs:
+                        kap_chunks = embed_documents(kap_docs)
+                        store.add_documents(kap_chunks)
+                        logger.info(f"Auto-ingest: added {len(kap_chunks)} KAP chunks for {ticker}")
+
+                    # Genel finans haberleri
+                    rss = RSSNewsScraper()
+                    news_docs = rss.fetch_news(ticker, limit=15, days_back=90)
+                    if news_docs:
+                        news_chunks = embed_documents(news_docs)
+                        store.add_documents(news_chunks)
+                        logger.info(f"Auto-ingest: added {len(news_chunks)} news chunks for {ticker}")
+
+                except Exception as ingest_err:
+                    logger.warning(f"Auto-ingest failed for {ticker}: {ingest_err}")
+        else:
+            # Ticker yoksa genel olarak VectorStore boşsa uyar
+            stats = store.get_stats()
+            if stats.get("total_chunks", 0) == 0:
+                logger.warning("Query received but VectorStore is empty.")
+
         result = agent.run(question=req.question, ticker=req.ticker)
     except Exception as e:
         import traceback

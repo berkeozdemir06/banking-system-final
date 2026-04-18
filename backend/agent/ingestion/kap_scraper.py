@@ -1,27 +1,27 @@
 """
-KAP Scraper — kap.org.tr'den KAP bildirimlerini çeker.
+KAP Scraper — Google News RSS Proxy Modu
+kap.org.tr API'si bot koruması nedeniyle erişimi engellediğinden,
+Google News RSS üzerinden "{TICKER} KAP bildirimi" araması yaparak
+gerçek zamanlı KAP haberlerini çeker.
 
-Desteklenen işlemler:
-  - Şirkete göre son bildirimleri listele
-  - Bildirim türüne göre filtrele (ÖZEL DURUM, FİNANSAL RAPOR, vb.)
-  - Ham metin + metadata çıkar
+Yedek: DuckDuckGo HTML scraping
 """
 
 import os
 import json
 import time
 import logging
-from datetime import datetime
+import re
+import urllib.parse
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
+from email.utils import parsedate_to_datetime
 from typing import Optional
+
 import requests
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
-
-# ── KAP API Endpoints ─────────────────────────────────────────────────────────
-KAP_BASE        = "https://www.kap.org.tr"
-KAP_DISC_API    = f"{KAP_BASE}/tr/api/disclosures"      # bildirim listesi
-KAP_MEMBER_API  = f"{KAP_BASE}/tr/api/memberCompanies"  # şirket listesi
 
 HEADERS = {
     "User-Agent": (
@@ -30,17 +30,18 @@ HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8",
-    "Referer": "https://www.kap.org.tr/tr/bildirim-sorgu",
+    "Accept": "application/rss+xml, application/xml, text/xml, */*",
 }
 
-# ── Main Scraper Class ────────────────────────────────────────────────────────
+
 class KAPScraper:
     """
-    KAP (Kamuyu Aydınlatma Platformu) scraper.
+    KAP (Kamuyu Aydınlatma Platformu) scraper — Google News RSS Modu.
 
+    kap.org.tr doğrudan API erişimini engellediğinden Google News RSS kullanılır.
     Kullanım:
         scraper = KAPScraper()
-        docs = scraper.fetch_disclosures(ticker="ASELS", limit=20)
+        docs = scraper.fetch_disclosures(ticker="ASELS", limit=30)
     """
 
     def __init__(self, save_dir: str = "data/raw/kap"):
@@ -49,8 +50,6 @@ class KAPScraper:
         self.session = requests.Session()
         self.session.headers.update(HEADERS)
 
-    # ── Public API ────────────────────────────────────────────────────────────
-
     def fetch_disclosures(
         self,
         ticker: str,
@@ -58,216 +57,208 @@ class KAPScraper:
         disc_type: Optional[str] = None,
     ) -> list[dict]:
         """
-        Belirtilen ticker için KAP bildirimlerini çeker.
+        Belirtilen ticker için KAP bildirimlerini Google News RSS üzerinden çeker.
 
         Args:
             ticker:    Hisse kodu (örn. "ASELS", "THYAO")
             limit:     Maksimum bildirim sayısı
-            disc_type: Filtre — None = hepsi, "ÖZEL DURUM", "FİNANSAL RAPOR" vb.
+            disc_type: Şu an kullanılmıyor (ilerleyen versiyonlar için)
 
         Returns:
-            List of document dicts with mandatory metadata schema:
-              {ticker, source_type, date, institution, title, content, url}
+            List of document dicts with mandatory metadata schema
         """
-        logger.info(f"Fetching KAP disclosures for {ticker} (limit={limit})")
+        logger.info(f"Fetching KAP disclosures for {ticker} via Google News RSS (limit={limit})")
+        t_up = ticker.upper()
 
-        # 1. Şirket üye ID'sini bul
-        member_id = self._get_member_id(ticker)
-        if not member_id:
-            logger.error(f"Ticker not found or KAP blocked fetch: {ticker}. Proceeding to mock fallback.")
-            raw_list = []
-        else:
-            # 2. Bildirimleri çek
-            raw_list = self._fetch_disclosure_list(member_id, limit)
+        # Birden fazla arama sorgusu ile kapsamlı veri çek
+        queries = [
+            f'"{t_up}" KAP bildirimi',
+            f'"{t_up}" KAP özel durum',
+            f'"{t_up}" borsa bildirim',
+        ]
 
-        # 3. Tür filtresi uygula
-        if disc_type:
-            raw_list = [d for d in raw_list if disc_type.upper() in d.get("disclosureType", "").upper()]
-
-        # 4. Her bildirim için detay + metin çek
         docs = []
-        for item in raw_list[:limit]:
-            doc = self._parse_disclosure(item, ticker)
-            if doc:
-                docs.append(doc)
-            time.sleep(0.4)  # rate limit
+        seen_titles = set()
+
+        for query in queries:
+            if len(docs) >= limit:
+                break
+            fetched = self._fetch_google_news_rss(query, ticker, seen_titles)
+            docs.extend(fetched)
+
+        # Google News yeterli sonuç vermediyse DuckDuckGo'ya düş
+        if len(docs) < 3:
+            logger.warning(f"Google News returned only {len(docs)} results for {ticker}, trying DDG fallback")
+            ddg_docs = self._fetch_via_ddg(ticker, limit - len(docs), seen_titles)
+            docs.extend(ddg_docs)
+
+        docs = docs[:limit]
 
         if not docs:
-            logger.warning(f"KAP returned empty or blocked IP. Generating mock fallback for {ticker}")
-            import datetime
-            
-            now = datetime.datetime.now(datetime.timezone.utc)
-            dummy_date = (now - datetime.timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
-            
-            docs = [
-                {
-                    "ticker": ticker.upper(),
-                    "source_type": "kap",
-                    "date": dummy_date,
-                    "institution": "KAP (Kamuyu Aydınlatma Platformu)",
-                    "title": f"Özel Durum Açıklaması - Üst Düzey Yönetici ve Yönetim Kurulu Değişikliği",
-                    "content": f"{ticker.upper()} şirketinin yönetim kurulunun aldığı karara istinaden, Yatırımcı İlişkileri Yöneticiliği görevine ve Denetim Komitesine yeni bir atama gerçekleştirilmiştir. Operasyonel ve finansal işleyişteki kurumsal sürdürülebilirlik ilkelerine bağlı olarak yapılan atamada, daha önce sektörde tecrübeli üst düzey yöneticiler şirket kadrosuna katılmıştır.",
-                    "url": f"https://www.kap.org.tr/tr/sirket/{ticker.lower()}",
-                },
-                {
-                    "ticker": ticker.upper(),
-                    "source_type": "kap",
-                    "date": (now - datetime.timedelta(days=15)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "institution": "KAP (Kamuyu Aydınlatma Platformu)",
-                    "title": f"Finansal Rapor - Son Çeyrek Bilanço ve Yıl Sonu Satış Beklentileri",
-                    "content": f"{ticker.upper()} son finansal döneminde enflasyon muhasebesine göre düzenlenmiş bilançosunu KAP'a bildirmiştir. Açıklamada, son 6 aylık dönemde toplam cironun %35 oranında büyüdüğü ve şirketin stratejik hedefleri doğrultusunda karlılık oranlarında önemli iyileşmeler gözlemlendiği vurgulanmıştır.",
-                    "url": f"https://www.kap.org.tr/tr/sirket/{ticker.lower()}",
-                }
-            ]
+            logger.warning(f"All sources failed for {ticker}, generating structural mock")
+            docs = self._make_fallback(ticker)
 
-        logger.info(f"Fetched {len(docs)} disclosures for {ticker}")
+        logger.info(f"Fetched {len(docs)} KAP disclosures for {ticker}")
         self._save(ticker, docs)
         return docs
 
     def get_company_list(self) -> list[dict]:
-        """KAP'taki tüm BIST şirketlerini döndürür."""
-        try:
-            resp = self.session.get(KAP_MEMBER_API, timeout=3)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            logger.error(f"Company list fetch failed: {e}")
-            return []
+        """BIST şirketleri listesi — Google News'ten çekilemez, statik liste döner."""
+        return [
+            {"memberCode": t, "memberId": str(i)}
+            for i, t in enumerate([
+                "ASELS", "THYAO", "GARAN", "AKBNK", "ISCTR", "HALKB",
+                "VAKBN", "TUPRS", "EREGL", "KCHOL", "SAHOL", "BIMAS",
+                "TCELL", "FROTO", "TOASO", "PETKM", "SASA", "EKGYO",
+            ], start=1)
+        ]
 
     # ── Internal Methods ──────────────────────────────────────────────────────
 
-    def _get_member_id(self, ticker: str) -> Optional[str]:
-        """Ticker'dan KAP üye ID'si bulur — BIST30 Fail-safe Map eklenmiştir."""
-        
-        # ── BIST30 Fail-safe Map (Bypassing API discovery issues) ──────────
-        BIST_KAP_MAP = {
-            "ASELS": "1113", "THYAO": "1114", "TRENJ": "1115", "IPEKE": "1115",
-            "GARAN": "1111", "AKBNK": "1112", "ISCTR": "1116", "HALKB": "1117",
-            "VAKBN": "1118", "TUPRS": "1119", "EREGL": "1120", "KCHOL": "1121",
-            "SAHOL": "1122", "BIMAS": "1123", "TCELL": "1124", "FROTO": "1125",
-            "TOASO": "1126", "PETKM": "1127", "SASA":  "1128", "EKGYO": "1129",
-        }
-        
-        t_up = ticker.upper()
-        if t_up in BIST_KAP_MAP:
-            return BIST_KAP_MAP[t_up]
+    def _fetch_google_news_rss(
+        self, query: str, ticker: str, seen_titles: set
+    ) -> list[dict]:
+        """Google News RSS'ten belirtilen sorgu için haberleri çeker."""
+        encoded = urllib.parse.quote(query)
+        url = f"https://news.google.com/rss/search?q={encoded}&hl=tr&gl=TR&ceid=TR:tr"
 
         try:
-            resp = self.session.get(KAP_MEMBER_API, timeout=10)
+            resp = self.session.get(url, timeout=15)
             resp.raise_for_status()
-            companies = resp.json()
-            for c in companies:
-                m_code = c.get("memberCode", "").upper()
-                if m_code == t_up:
-                    return str(c.get("memberId") or c.get("id", ""))
+            root = ET.fromstring(resp.content)
+            items = root.findall("./channel/item")
         except Exception as e:
-            logger.error(f"Member ID lookup failed for {ticker}: {e}")
-        return None
-
-    def _fetch_disclosure_list(self, member_id: str, limit: int) -> list[dict]:
-        """KAP API'sinden ham bildirim listesini alır."""
-        try:
-            params = {
-                "memberId": member_id,
-                "pageSize": min(limit, 50),
-                "pageIndex": 0,
-            }
-            resp = self.session.get(KAP_DISC_API, params=params, timeout=3)
-            resp.raise_for_status()
-            data = resp.json()
-            # API farklı yapı döndürebilir
-            if isinstance(data, list):
-                return data
-            return data.get("data", data.get("items", []))
-        except Exception as e:
-            logger.warning(f"Disclosure list API failed ({e}), trying HTML fallback")
-            return self._fetch_via_html(member_id, limit)
-
-    def _fetch_via_html(self, member_id: str, limit: int) -> list[dict]:
-        """API başarısız olursa HTML sayfasını parse eder."""
-        url = f"{KAP_BASE}/tr/sirket-bildirim/{member_id}"
-        try:
-            resp = self.session.get(url, timeout=3)
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.text, "lxml")
-            rows = soup.select("table.w-table tbody tr")[:limit]
-            items = []
-            for row in rows:
-                cols = row.find_all("td")
-                if len(cols) < 3:
-                    continue
-                link_tag = cols[1].find("a")
-                items.append({
-                    "date": cols[0].get_text(strip=True),
-                    "title": cols[1].get_text(strip=True),
-                    "url": KAP_BASE + link_tag["href"] if link_tag else "",
-                    "disclosureType": cols[2].get_text(strip=True) if len(cols) > 2 else "",
-                })
-            return items
-        except Exception as e:
-            logger.error(f"HTML fallback also failed: {e}")
+            logger.warning(f"Google News RSS failed for query '{query}': {e}")
             return []
 
-    def _parse_disclosure(self, item: dict, ticker: str) -> Optional[dict]:
-        """Tek bir bildirimin içeriğini ve metadata'sını çıkarır."""
+        docs = []
+        for item in items:
+            try:
+                title_el = item.find("title")
+                link_el = item.find("link")
+                pub_el = item.find("pubDate")
+                desc_el = item.find("description")
+
+                title = title_el.text.strip() if title_el is not None and title_el.text else ""
+                link = link_el.text.strip() if link_el is not None and link_el.text else ""
+                pub_raw = pub_el.text.strip() if pub_el is not None and pub_el.text else ""
+                desc_raw = desc_el.text if desc_el is not None and desc_el.text else ""
+
+                if not title or title in seen_titles:
+                    continue
+                seen_titles.add(title)
+
+                # HTML temizle
+                desc_clean = re.sub(r"<[^>]+>", " ", desc_raw).strip()
+                content = f"{title}. {desc_clean}" if desc_clean else title
+
+                date_str = self._parse_rss_date(pub_raw)
+
+                docs.append({
+                    "ticker":      ticker.upper(),
+                    "source_type": "kap",
+                    "date":        date_str,
+                    "institution": "KAP / BIST (Google News RSS)",
+                    "title":       title,
+                    "content":     content[:4000],
+                    "url":         link,
+                    "disc_type":   "KAP Bildirimi",
+                })
+                time.sleep(0.1)
+            except Exception as e:
+                logger.debug(f"Item parse error: {e}")
+                continue
+
+        return docs
+
+    def _fetch_via_ddg(
+        self, ticker: str, limit: int, seen_titles: set
+    ) -> list[dict]:
+        """DuckDuckGo HTML scraping ile KAP haberlerini çeker."""
+        docs = []
         try:
-            url = item.get("url") or item.get("disclosureUrl") or item.get("link", "")
-            if url and not url.startswith("http"):
-                url = KAP_BASE + url
-
-            content = ""
-            if url:
-                content = self._extract_text(url)
-
-            raw_date = (
-                item.get("publishDate")
-                or item.get("date")
-                or item.get("disclosureDate", "")
+            query = f"{ticker} KAP bildirimi özel durum"
+            url = "https://html.duckduckgo.com/html/"
+            ddg_headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:102.0) Gecko/20100101 Firefox/102.0"
+            }
+            resp = self.session.post(
+                url, data={"q": query}, headers=ddg_headers, timeout=15
             )
+            soup = BeautifulSoup(resp.text, "html.parser")
+            results = soup.select(".result")
 
-            return {
-                # ── Mandatory metadata schema ──────────────────────────
+            for res in results[:limit * 3]:
+                a_tag = res.select_one(".result__a")
+                snip_tag = res.select_one(".result__snippet")
+                if not a_tag:
+                    continue
+
+                title = a_tag.get_text(strip=True)
+                snippet = snip_tag.get_text(strip=True) if snip_tag else ""
+
+                # KAP/borsa ile ilgili olanları filtrele
+                combined = (title + " " + snippet).upper()
+                if "KAP" not in combined and "BİLDİRİM" not in combined and ticker.upper() not in combined:
+                    continue
+
+                if title in seen_titles:
+                    continue
+                seen_titles.add(title)
+
+                content = f"{title}. {snippet}" if snippet else title
+                docs.append({
+                    "ticker":      ticker.upper(),
+                    "source_type": "kap",
+                    "date":        datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "institution": "KAP / BIST (DuckDuckGo Proxy)",
+                    "title":       title,
+                    "content":     content[:4000],
+                    "url":         a_tag.get("href", ""),
+                    "disc_type":   "KAP Bildirimi",
+                })
+                if len(docs) >= limit:
+                    break
+                time.sleep(0.3)
+        except Exception as e:
+            logger.error(f"DDG fallback failed: {e}")
+        return docs
+
+    def _make_fallback(self, ticker: str) -> list[dict]:
+        """Tüm kaynaklar başarısız olursa yapısal placeholder döner."""
+        now = datetime.utcnow()
+        return [
+            {
                 "ticker":      ticker.upper(),
                 "source_type": "kap",
-                "date":        self._normalize_date(raw_date),
-                "institution": "KAP / SPK",
-                # ── Content ────────────────────────────────────────────
-                "title":   item.get("title") or item.get("disclosureTitle", "KAP Bildirimi"),
-                "content": content,
-                "url":     url,
-                "disc_type": item.get("disclosureType", ""),
+                "date":        (now - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "institution": "KAP (Fallback)",
+                "title":       f"{ticker.upper()} — KAP Bildirimi (Veri Alınamadı)",
+                "content": (
+                    f"{ticker.upper()} için KAP bildirimleri şu an çekilemiyor. "
+                    "Lütfen kap.org.tr adresini manuel ziyaret edin ya da daha sonra tekrar deneyin."
+                ),
+                "url":         f"https://www.kap.org.tr/tr/sirket/{ticker.lower()}",
+                "disc_type":   "KAP Fallback",
             }
-        except Exception as e:
-            logger.warning(f"Failed to parse disclosure item: {e}")
-            return None
-
-    def _extract_text(self, url: str) -> str:
-        """Bildirim sayfasının metin içeriğini çeker."""
-        try:
-            resp = self.session.get(url, timeout=3)
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.text, "lxml")
-            # KAP bildirimleri genellikle .disclosure-content veya main içinde
-            for sel in [".disclosure-content", ".content-wrapper", "main", "article"]:
-                block = soup.select_one(sel)
-                if block:
-                    return block.get_text(separator="\n", strip=True)
-            return soup.get_text(separator="\n", strip=True)[:8000]
-        except Exception as e:
-            logger.warning(f"Text extraction failed for {url}: {e}")
-            return ""
+        ]
 
     @staticmethod
-    def _normalize_date(raw: str) -> str:
-        """Tarihi ISO 8601 formatına çevirir."""
+    def _parse_rss_date(raw: str) -> str:
+        """RSS pubDate'i ISO 8601 formatına çevirir."""
         if not raw:
             return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            dt = parsedate_to_datetime(raw)
+            return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            pass
         for fmt in ["%Y-%m-%dT%H:%M:%S", "%d.%m.%Y %H:%M", "%d.%m.%Y", "%Y-%m-%d"]:
             try:
                 return datetime.strptime(raw.strip()[:19], fmt).strftime("%Y-%m-%dT%H:%M:%SZ")
             except ValueError:
                 continue
-        return raw
+        return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def _save(self, ticker: str, docs: list[dict]) -> None:
         """Çekilen bildirimleri JSON olarak kaydeder."""
@@ -281,8 +272,8 @@ class KAPScraper:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     scraper = KAPScraper()
-    docs = scraper.fetch_disclosures("ASELS", limit=5)
+    docs = scraper.fetch_disclosures("ASELS", limit=10)
+    print(f"\nTotal: {len(docs)} docs")
     for d in docs:
-        print(f"[{d['date']}] {d['title'][:80]}")
-        print(f"  → {d['url']}")
-        print()
+        print(f"[{d['date'][:10]}] {d['title'][:90]}")
+        print(f"  → {d['url'][:80]}")
