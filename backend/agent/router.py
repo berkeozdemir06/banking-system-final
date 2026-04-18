@@ -30,34 +30,24 @@ def get_store():
             persist_path   = os.getenv("CHROMA_PATH", "./data/chroma_db")
             embed_provider = os.getenv("EMBED_PROVIDER", "default")
             os.makedirs(persist_path, exist_ok=True)
-            _store = BISTVectorStore(
-                persist_path=persist_path,
-                embed_provider=embed_provider,
-            )
+            _store = BISTVectorStore(persist_path=persist_path, embed_provider=embed_provider)
         except Exception as e:
             logger.error(f"VectorStore init failed: {e}")
-            raise HTTPException(status_code=503, detail=f"VectorStore init failed: {str(e)}")
+            raise HTTPException(status_code=503, detail="VectorStore offline")
     return _store
 
-# ── Schemas ───────────────────────────────────────────────────────────────────
-
+# ── Schemas ──
 class QueryRequest(BaseModel):
-    question: str = Field(..., description="Kullanıcı sorusu")
-    ticker:   Optional[str] = Field(None, description="Hisse filtresi, örn. 'ASELS'")
-
-class AgentDecisionModel(BaseModel):
-    sources_selected: List[str]
-    time_horizon: str
-    needs_reretrieval: bool
-    reasoning: str
+    question: str
+    ticker:   Optional[str] = None
 
 class QueryResponse(BaseModel):
     answer:          str
     sources:         List[dict]
-    ticker:          Optional[str]
+    ticker:          Optional[str] = None
     market_data:     Optional[dict] = None
     disclaimer:      str = DISCLAIMER
-    decision:        Optional[AgentDecisionModel] = None
+    decision:        Optional[dict] = None
     consistency_note: Optional[str] = None
     iterations:      int = 1
 
@@ -65,12 +55,8 @@ class QueryResponse(BaseModel):
 
 @router.post("/query", response_model=QueryResponse)
 async def query(req: QueryRequest):
-    """Ana RAG endpoint — pazar verisi ve KAP etki analizi eklenmiş versiyon."""
+    """Safe Query Endpoint — Prevents 500 errors if market data fails."""
     
-    groq_key = os.getenv("GROQ_API_KEY", "")
-    if not groq_key:
-        return JSONResponse(status_code=500, content={"error": "Sistem hatası: GROQ_API_KEY eksik."})
-
     from backend.agent.engine.bist_agent import BISTAgent
     from backend.agent.ingestion.market_data import MarketDataFetcher
     
@@ -82,67 +68,43 @@ async def query(req: QueryRequest):
     market_data = None
 
     if ticker:
-        # 1. Temel Market Verileri
-        market_data = market_fetcher.get_summary(ticker)
-        
-        # 2. Auto-Ingest
-        stats = store.get_stats()
-        ticker_count = stats.get("by_ticker", {}).get(ticker, 0)
-        if ticker_count == 0:
-            from backend.agent.ingestion.kap_scraper import KAPScraper
-            from backend.agent.ingestion.rss_scraper import RSSNewsScraper
-            from backend.agent.embeddings.embedder import embed_documents
-            kap = KAPScraper(); kap_docs = kap.fetch_disclosures(ticker, limit=20)
-            if kap_docs: store.add_documents(embed_documents(kap_docs))
-            rss = RSSNewsScraper(); news_docs = rss.fetch_news(ticker, limit=15)
-            if news_docs: store.add_documents(embed_documents(news_docs))
-
-        # 3. KAP Etki Analizi (Son KAP Tarihini Bul)
         try:
+            # 1. Market Summary (Safe catch)
+            market_data = market_fetcher.get_summary(ticker)
+            
+            # 2. KAP Impact Analysis (Safe catch)
             docs = store.search(ticker, query="", limit=5)
             kap_dates = [d.metadata.get("date") for d in docs if d.metadata.get("source_type") == "kap" and d.metadata.get("date")]
-            if kap_dates:
+            if kap_dates and market_data:
                 latest_kap = sorted(kap_dates, reverse=True)[0]
                 impact = market_fetcher.get_price_after_event(ticker, latest_kap)
                 if impact:
-                    market_data["kap_impact"] = {
-                        "date": latest_kap,
-                        **impact
-                    }
-        except: pass
+                    market_data["kap_impact"] = {"date": latest_kap, **impact}
+        except Exception as e:
+            logger.warning(f"Non-critical Market Data fetch failed for {ticker}: {e}")
 
-    # 4. Context Oluştur
-    context_prefix = ""
+    # 3. Context string
+    ctx = ""
     if market_data:
-        context_prefix = (
-            f"--- GÜNCEL PİYASA VERİLERİ ({ticker}) ---\n"
-            f"Fiyat: {market_data.get('last_price')} TL, Günlük Değişim: %{market_data.get('daily_change')}\n"
-            f"Getiriler: 1H: %{market_data['returns']['1w']}, 1A: %{market_data['returns']['1m']}, 1Y: %{market_data['returns']['1y']}\n"
-            f"BIST 100 Karşılaştırması (1Y): %{market_data.get('bist100_comparison_1y')} fark\n"
-            f"İstikrar: {market_data.get('stability')}\n"
-        )
+        ctx = f"--- MARKET DATA ({ticker}) ---\nPrice: {market_data.get('last_price')}, Change: %{market_data.get('daily_change')}\n"
         if "kap_impact" in market_data:
-            ki = market_data["kap_impact"]
-            context_prefix += f"Son KAP Bildirimi Etkisi ({ki['date']}): Hisse %{ki['stock_reaction']}, Endeks %{ki['index_reaction']}\n"
-        context_prefix += "-------------------------------------------\n\n"
+            ctx += f"Reaction to KAP ({market_data['kap_impact']['date']}): %{market_data['kap_impact']['stock_reaction']}\n"
+        ctx += "------------------\n\n"
 
     try:
-        result = agent.run(context_prefix + req.question, ticker=ticker)
+        result = agent.run(ctx + req.question, ticker=ticker)
         return QueryResponse(
             answer=result["answer"],
             sources=result["sources"],
             ticker=ticker,
             market_data=market_data,
             decision=result.get("decision"),
-            consistency_note=result.get("consistency_note"),
-            iterations=result.get("iterations", 1)
+            consistency_note=result.get("consistency_note")
         )
     except Exception as e:
-        logger.error(f"Agent failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Agent analysis failed: {e}")
+        raise HTTPException(status_code=500, detail="Analysis engine failed")
 
 @router.get("/status")
 async def get_agent_status():
-    store = get_store()
-    stats = store.get_stats()
-    return {"status": "online", "vectorstore": stats, "version": "4.2.0-impact-aware"}
+    return {"status": "online", "version": "4.2.1-stable"}
