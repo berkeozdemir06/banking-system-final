@@ -88,10 +88,29 @@ async def get_agent_status():
 @router.post("/query", response_model=QueryResponse)
 async def query(req: QueryRequest):
     """Ana RAG endpoint — soru sor, kaynaklı cevap al. BISTAgent kullanılır."""
+    
+    # ── Pre-flight Check ───────────────────────────────────────────────────
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key:
+        logger.error("GROQ_API_KEY is missing!")
+        return JSONResponse(
+            status_code=500, 
+            content={
+                "error": "Sistem hatası: GROQ_API_KEY eksik. Lütfen .env dosyasını kontrol edin.",
+                "trace": "Environment variable 'GROQ_API_KEY' not found."
+            }
+        )
+
     from backend.agent.engine.bist_agent import BISTAgent
     store = get_store()
     agent = BISTAgent(store=store)
     try:
+        # Check if store has any documents at all for context
+        stats = store.get_stats()
+        if stats.get("total_chunks", 0) == 0:
+            logger.warning("Query received but VectorStore is empty.")
+            # We continue anyway, the agent will handle empty context
+            
         result = agent.run(question=req.question, ticker=req.ticker)
     except Exception as e:
         import traceback
@@ -143,7 +162,18 @@ def ingest_kap(req: IngestKAPRequest):
     
         chunks = embed_documents(docs)
         added  = store.add_documents(chunks)
-        return {"ticker": req.ticker, "docs": len(docs), "chunks_added": added}
+        
+        doc_summaries = [
+            {"title": d.get("title", "KAP Disclosure"), "date": d.get("date", "")[:10]}
+            for d in docs[:5]
+        ]
+        
+        return {
+            "ticker": req.ticker, 
+            "docs": len(docs), 
+            "chunks_added": added,
+            "summaries": doc_summaries
+        }
     except Exception as e:
         import traceback
         return {"error": str(e), "traceback": traceback.format_exc()}
@@ -176,7 +206,19 @@ def ingest_news(req: IngestNewsRequest):
 
         chunks = embed_documents(docs)
         added  = store.add_documents(chunks)
-        return {"ticker": req.ticker, "docs": len(docs), "chunks_added": added, "source": "rss+firecrawl"}
+        
+        doc_summaries = [
+            {"title": d.get("title", "News Article"), "date": d.get("date", "")[:10]}
+            for d in docs[:5]
+        ]
+
+        return {
+            "ticker": req.ticker, 
+            "docs": len(docs), 
+            "chunks_added": added, 
+            "source": "rss+firecrawl",
+            "summaries": doc_summaries
+        }
     except Exception as e:
         import traceback
         logger.error(f"INGEST NEWS CRASH: {e}\n{traceback.format_exc()}")

@@ -31,11 +31,12 @@ HEADERS = {
 
 # ── News sources ──────────────────────────────────────────────────────────────
 NEWS_SOURCES = {
-    "hurriyet": {
-        "search_url": "https://www.hurriyet.com.tr/ekonomi/",
-        "article_sel": "a.card-title-link",
-        "content_sel": ".content-article",
-        "date_sel": "time",
+    "googlenews": {
+        "url": "https://news.google.com/rss/search?q={ticker}+hisse&hl=tr&gl=TR&ceid=TR:tr",
+    },
+    "mynet": {
+        "search_url": "https://finans.mynet.com/borsa/hisseler/{ticker}/",
+        "link_sel": "ul.mb-6 li a",
     },
     "bloomberght": {
         "search_url": "https://www.bloomberght.com/hisseler/{ticker}",
@@ -50,10 +51,7 @@ NEWS_SOURCES = {
 class NewsScraper:
     """
     Türk finansal haber scraper'ı.
-
-    Kullanım:
-        scraper = NewsScraper(firecrawl_api_key="...")
-        docs = scraper.fetch_news(ticker="ASELS", limit=20)
+    RSS (Google News) ve HTML Fallback (Mynet) kullanır.
     """
 
     def __init__(
@@ -76,31 +74,65 @@ class NewsScraper:
         days_back: int = 90,
     ) -> list[dict]:
         """
-        Ticker ile ilgili haberleri çeker.
-
-        Args:
-            ticker:    Hisse kodu (örn. "ASELS")
-            limit:     Maksimum haber sayısı
-            days_back: Kaç gün geriye bakılacak
-
-        Returns:
-            List of document dicts with mandatory metadata schema
+        Ticker ile ilgili haberleri çeker. prioritize highly current RSS data.
         """
         logger.info(f"Fetching news for {ticker} (limit={limit}, days_back={days_back})")
         docs = []
 
-        # Firecrawl varsa kullan
-        if self.firecrawl_key:
-            docs = self._fetch_via_firecrawl(ticker, limit)
-        else:
-            # Fallback: doğrudan HTML parse
-            docs = self._fetch_via_html(ticker, limit)
+        # 1. Google News RSS (Reliable & Current)
+        docs.extend(self._fetch_via_rss(ticker, limit // 2))
 
+        # 2. Mynet / HTML Fallback
+        if len(docs) < limit:
+            docs.extend(self._fetch_via_html(ticker, limit - len(docs)))
+
+        # 3. Firecrawl (Optional Pro Path)
+        if len(docs) < limit and self.firecrawl_key:
+            docs.extend(self._fetch_via_firecrawl(ticker, limit - len(docs)))
+
+        # Date filtering
         cutoff = datetime.utcnow() - timedelta(days=days_back)
-        docs = [d for d in docs if self._parse_date(d["date"]) >= cutoff]
+        unique_docs = []
+        seen_titles = set()
 
-        logger.info(f"Fetched {len(docs)} news articles for {ticker}")
-        self._save(ticker, docs)
+        for d in docs:
+            if d["title"] not in seen_titles and self._parse_date(d["date"]) >= cutoff:
+                unique_docs.append(d)
+                seen_titles.add(d["title"])
+
+        logger.info(f"Final Count: {len(unique_docs)} news articles for {ticker}")
+        self._save(ticker, unique_docs)
+        return unique_docs
+
+    # ── RSS Integration ────────────────────────────────────────────────────────
+
+    def _fetch_via_rss(self, ticker: str, limit: int) -> list[dict]:
+        """Google News RSS üzerinden güncel haber çeker."""
+        docs = []
+        url = NEWS_SOURCES["googlenews"]["url"].format(ticker=ticker)
+        try:
+            resp = self.session.get(url, timeout=15)
+            # RSS is XML, but we use html.parser as a fallback if lxml is missing
+            soup = BeautifulSoup(resp.text, "html.parser")
+            items = soup.select("item")[:limit]
+            for item in items:
+                title = item.title.text if item.title else "Haber"
+                link = item.link.text if item.link else ""
+                date_str = item.pubdate.text if item.pubdate else "" # case insensitive in soup
+                
+                doc = {
+                    "ticker":      ticker.upper(),
+                    "source_type": "news",
+                    "date":        self._normalize_date(date_str),
+                    "institution": "Google News / " + (item.source.text if item.source else "Media"),
+                    "title":       title,
+                    "content":     title, # RSS results usually just titles, use as base
+                    "url":         link,
+                    "sentiment":   None,
+                }
+                docs.append(doc)
+        except Exception as e:
+            logger.warning(f"Google News RSS failed: {e}")
         return docs
 
     # ── Firecrawl Integration ─────────────────────────────────────────────────
@@ -108,7 +140,7 @@ class NewsScraper:
     def _fetch_via_firecrawl(self, ticker: str, limit: int) -> list[dict]:
         """Firecrawl API kullanarak haber çeker."""
         docs = []
-        search_queries = [ticker, f"{ticker} hisse", f"{ticker} KAP bildirimi"]
+        search_queries = [ticker, f"{ticker} hisse news", f"{ticker} son durum"]
 
         for query in search_queries[:2]:
             try:
@@ -120,19 +152,18 @@ class NewsScraper:
                     },
                     json={
                         "query": query,
-                        "limit": limit // 2,
+                        "limit": max(5, limit // 2),
                         "lang": "tr",
                         "country": "tr",
                         "searchOptions": {"excludeDomains": ["twitter.com","youtube.com"]},
                     },
-                    timeout=30,
+                    timeout=20,
                 )
                 if resp.status_code == 200:
                     results = resp.json().get("data", [])
                     for r in results:
                         doc = self._build_doc(r, ticker, source="firecrawl")
-                        if doc:
-                            docs.append(doc)
+                        if doc: docs.append(doc)
             except Exception as e:
                 logger.warning(f"Firecrawl search failed for '{query}': {e}")
             time.sleep(0.5)
@@ -142,37 +173,62 @@ class NewsScraper:
     # ── HTML Fallback ─────────────────────────────────────────────────────────
 
     def _fetch_via_html(self, ticker: str, limit: int) -> list[dict]:
-        """Firecrawl olmadan doğrudan HTML scraping yapar."""
+        """Mynet ve Investing üzerinden doğrudan HTML scraping yapar."""
         docs = []
-
-        # Investing.com TR arama
-        url = f"https://tr.investing.com/search/?q={ticker}&tab=news"
+        
+        # 1. Mynet Finans (Stable local source)
+        url = NEWS_SOURCES["mynet"]["search_url"].format(ticker=ticker.lower())
         try:
-            resp = self.session.get(url, timeout=20)
+            resp = self.session.get(url, timeout=15)
             soup = BeautifulSoup(resp.text, "html.parser")
-            articles = soup.select(".articleItem")[:limit]
-            for art in articles:
-                link = art.select_one("a")
-                title_el = art.select_one(".articleTitle")
-                date_el = art.select_one(".date")
-                if not link:
-                    continue
-                href = link.get("href", "")
-                href = "https://tr.investing.com" + href if href.startswith("/") else href
+            items = soup.select(NEWS_SOURCES["mynet"]["link_sel"])[:limit]
+            for it in items:
+                href = it.get("href", "")
+                if not href.startswith("http"): href = "https://finans.mynet.com" + href
                 doc = {
                     "ticker":      ticker.upper(),
                     "source_type": "news",
-                    "date":        self._normalize_date(date_el.text if date_el else ""),
-                    "institution": "Investing.com TR",
-                    "title":       title_el.get_text(strip=True) if title_el else "Haber",
-                    "content":     self._get_article_text(href),
+                    "date":        datetime.utcnow().isoformat() + "Z", # placeholder
+                    "institution": "Mynet Finans",
+                    "title":       it.get_text(strip=True),
+                    "content":     "", 
                     "url":         href,
                     "sentiment":   None,
                 }
+                # Optional: deep fetch text
+                doc["content"] = self._get_article_text(href)
                 docs.append(doc)
-                time.sleep(0.5)
+                if len(docs) >= limit: break
+                time.sleep(0.3)
         except Exception as e:
-            logger.warning(f"Investing.com scraping failed: {e}")
+            logger.warning(f"Mynet scraping failed: {e}")
+
+        # 2. Investing.com TR Fallback
+        if len(docs) < limit:
+            url = f"https://tr.investing.com/search/?q={ticker}&tab=news"
+            try:
+                resp = self.session.get(url, timeout=15)
+                soup = BeautifulSoup(resp.text, "html.parser")
+                articles = soup.select(".articleItem")[:limit]
+                for art in articles:
+                    link = art.select_one("a")
+                    title_el = art.select_one(".articleTitle")
+                    if not link: continue
+                    href = link.get("href", "")
+                    if href.startswith("/"): href = "https://tr.investing.com" + href
+                    doc = {
+                        "ticker":      ticker.upper(),
+                        "source_type": "news",
+                        "date":        datetime.utcnow().isoformat() + "Z",
+                        "institution": "Investing.com TR",
+                        "title":       title_el.get_text(strip=True) if title_el else "Haber",
+                        "content":     self._get_article_text(href),
+                        "url":         href,
+                        "sentiment":   None,
+                    }
+                    docs.append(doc)
+            except Exception as e:
+                logger.warning(f"Investing.com scraping failed: {e}")
 
         return docs[:limit]
 
@@ -195,12 +251,16 @@ class NewsScraper:
 
     def _get_article_text(self, url: str) -> str:
         try:
-            resp = self.session.get(url, timeout=15)
+            resp = self.session.get(url, timeout=12)
             soup = BeautifulSoup(resp.text, "html.parser")
-            for sel in ["article", ".articlePage", ".WYSIWYG", "main"]:
+            # Multiple aggressive selectors for Turkish news portals
+            for sel in ["article", ".article-content", ".news-content", ".content-article", ".WYSIWYG", "main"]:
                 el = soup.select_one(sel)
                 if el:
-                    return el.get_text(separator="\n", strip=True)[:5000]
+                    # Remove ads/related widgets
+                    for bad in el.select(".ad, .recom-box, .social-share"): bad.decompose()
+                    txt = el.get_text(separator="\n", strip=True)
+                    if len(txt) > 200: return txt[:5000]
         except Exception:
             pass
         return ""
@@ -209,12 +269,14 @@ class NewsScraper:
     def _normalize_date(raw: str) -> str:
         if not raw:
             return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        for fmt in ["%Y-%m-%dT%H:%M:%S", "%d.%m.%Y %H:%M", "%d.%m.%Y", "%Y-%m-%d", "%b %d, %Y"]:
+        # Handle RSS Date format (e.g. Fri, 17 Apr 2026 12:00:00 GMT)
+        for fmt in ["%a, %d %b %Y %H:%M:%S %Z", "%Y-%m-%dT%H:%M:%S", "%d.%m.%Y %H:%M", "%d.%m.%Y", "%Y-%m-%d"]:
             try:
-                return datetime.strptime(raw.strip()[:19], fmt).strftime("%Y-%m-%dT%H:%M:%SZ")
-            except ValueError:
+                dt = datetime.strptime(raw.strip() if "%a" not in fmt else raw.strip(), fmt)
+                return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
                 continue
-        return raw
+        return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
     @staticmethod
     def _parse_date(date_str: str) -> datetime:
@@ -234,8 +296,7 @@ class NewsScraper:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     scraper = NewsScraper()
-    docs = scraper.fetch_news("THYAO", limit=5)
-    for d in docs[:3]:
-        print(f"[{d['date']}] {d['title'][:80]}")
-        print(f"  source: {d['institution']}")
-        print()
+    docs = scraper.fetch_news("ASELS", limit=5)
+    for d in docs[:5]:
+        print(f"[{d['date']}] {d['title']}")
+        print(f"  Url: {d['url'][:60]}...")

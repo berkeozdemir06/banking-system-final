@@ -19,6 +19,7 @@ from email.utils import parsedate_to_datetime
 from typing import Optional
 
 import requests
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -149,69 +150,73 @@ class RSSNewsScraper:
         return docs[:limit]
 
     def _parse_rss(self, xml_text: str, ticker: str, source: str) -> list[dict]:
-        """RSS XML metnini parse eder."""
+        """RSS XML metnini parse eder (BeautifulSoup kullanarak)."""
         docs = []
         try:
-            root = ET.fromstring(xml_text)
-        except ET.ParseError:
+            # BeautifulSoup is much more lenient than ElementTree for messy RSS
+            soup = BeautifulSoup(xml_text, "html.parser")
+            items = soup.find_all("item")
+            if not items:
+                items = soup.find_all("entry") # Atom fallback
+        except Exception as e:
+            logger.warning(f"BeautifulSoup RSS parse failed: {e}")
             return []
 
-        ns = {"atom": "http://www.w3.org/2005/Atom"}
-        items = root.findall(".//item") or root.findall(".//atom:entry", ns)
-
         for item in items:
-            title = (
-                self._get_text(item, "title") or
-                self._get_text(item, "atom:title", ns) or ""
-            ).strip()
-
-            link = (
-                self._get_text(item, "link") or
-                self._get_text(item, "atom:link", ns) or
-                item.find("link").get("href", "") if item.find("link") is not None else ""
-            )
-
-            description = (
-                self._get_text(item, "description") or
-                self._get_text(item, "atom:summary", ns) or
-                self._get_text(item, "atom:content", ns) or ""
-            )
-
-            # Strip HTML tags basitçe
-            import re
-            description = re.sub(r"<[^>]+>", " ", description).strip()
-
-            pub_date_str = (
-                self._get_text(item, "pubDate") or
-                self._get_text(item, "atom:published", ns) or
-                self._get_text(item, "atom:updated", ns) or ""
-            )
-
-            # Tarih parse
             try:
-                dt = parsedate_to_datetime(pub_date_str)
-                date_str = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-            except Exception:
+                title = item.title.get_text(strip=True) if item.title else ""
+                
+                # Link handles both <link>text</link> and <link href="..."/>
+                link = ""
+                if item.link:
+                    link = item.link.get_text(strip=True) or item.link.get("href", "")
+
+                description = ""
+                for tag in ["description", "summary", "content:encoded", "content"]:
+                    el = item.find(tag)
+                    if el:
+                        description = el.get_text(strip=True)
+                        break
+
+                # Clean HTML from description
+                import re
+                description = re.sub(r"<[^>]+>", " ", description).strip()
+
+                pub_date_str = ""
+                for tag in ["pubdate", "published", "updated", "dc:date"]:
+                    el = item.find(tag)
+                    if el:
+                        pub_date_str = el.get_text(strip=True)
+                        break
+
+                # Tarih parse
                 try:
-                    dt = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
+                    dt = parsedate_to_datetime(pub_date_str)
                     date_str = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
                 except Exception:
-                    date_str = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+                    try:
+                        # Handle ISO format
+                        dt = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
+                        date_str = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    except Exception:
+                        date_str = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            if not title:
+                if not title:
+                    continue
+
+                content = f"{title}. {description}" if (description and len(description) > 5) else title
+
+                docs.append({
+                    "ticker":      ticker.upper(),
+                    "source_type": "news",
+                    "date":        date_str,
+                    "institution": source.replace("_", " ").title(),
+                    "title":       title,
+                    "content":     content[:3000], # RSS contents are usually short
+                    "url":         link or "",
+                })
+            except Exception as item_err:
                 continue
-
-            content = f"{title}. {description}" if description else title
-
-            docs.append({
-                "ticker":      ticker.upper(),
-                "source_type": "news",
-                "date":        date_str,
-                "institution": source,
-                "title":       title,
-                "content":     content[:2000],
-                "url":         link or "",
-            })
 
         return docs
 
@@ -265,8 +270,6 @@ class RSSNewsScraper:
         for ev in events:
             d = now - timedelta(days=ev["days_ago"])
             docs.append({
-                "ticker":      ticker.upper(),
-                "source_type": "news",
                 "date":        d.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "institution": "RSS Fallback (Verified Events)",
                 "title":       ev["title"],
@@ -274,3 +277,12 @@ class RSSNewsScraper:
                 "url":         f"https://www.kap.org.tr/tr/sirket/{ticker.lower()}",
             })
         return docs
+
+
+# ── Quick test ────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    scraper = RSSNewsScraper()
+    docs = scraper.fetch_news("ASELS", limit=5)
+    for d in docs:
+        print(f"[{d['date']}] {d['title']}")

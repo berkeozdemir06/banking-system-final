@@ -147,39 +147,71 @@ class NewsScraper:
     # ── HTML Fallback ─────────────────────────────────────────────────────────
 
     def _fetch_via_html(self, ticker: str, limit: int) -> list[dict]:
-        """Firecrawl olmadan doğrudan HTML scraping yapar."""
+        """Firecrawl olmadan Google News RSS ve BeautifulSoup kullanarak haber çeker."""
         docs = []
-
-        # Investing.com TR arama
-        url = f"https://tr.investing.com/search/?q={ticker}&tab=news"
+        rss_url = f"https://news.google.com/rss/search?q={ticker}+hisse+borsa&hl=tr&gl=TR&ceid=TR:tr"
+        
         try:
-            resp = self.session.get(url, timeout=20)
-            soup = BeautifulSoup(resp.text, "lxml")
-            articles = soup.select(".articleItem")[:limit]
-            for art in articles:
-                link = art.select_one("a")
-                title_el = art.select_one(".articleTitle")
-                date_el = art.select_one(".date")
-                if not link:
-                    continue
-                href = link.get("href", "")
-                href = "https://tr.investing.com" + href if href.startswith("/") else href
+            resp = self.session.get(rss_url, timeout=20)
+            resp.raise_for_status()
+            
+            # Use BeautifulSoup to parse RSS
+            soup = BeautifulSoup(resp.text, "xml")
+            items = soup.find_all("item")[:limit]
+            
+            for item in items:
+                title = item.title.text if item.title else "Haber"
+                link = item.link.text if item.link else ""
+                pub_date = item.pubDate.text if item.pubDate else ""
+                source_name = item.source.text if item.source else "Google News"
+
+                content = self._get_article_text(link) if link else title
+                if not content: content = title
+
                 doc = {
                     "ticker":      ticker.upper(),
                     "source_type": "news",
-                    "date":        self._normalize_date(date_el.text if date_el else ""),
-                    "institution": "Investing.com TR",
-                    "title":       title_el.get_text(strip=True) if title_el else "Haber",
-                    "content":     self._get_article_text(href),
-                    "url":         href,
+                    "date":        self._normalize_date(pub_date),
+                    "institution": source_name,
+                    "title":       title,
+                    "content":     content[:3000],
+                    "url":         link,
                     "sentiment":   None,
                 }
                 docs.append(doc)
-                time.sleep(0.5)
+            
+            if not docs:
+                docs = self._fetch_mynet_fallback(ticker, limit)
         except Exception as e:
-            logger.warning(f"Investing.com scraping failed: {e}")
-
+            logger.warning(f"RSS news failed: {e}")
+            docs = self._fetch_mynet_fallback(ticker, limit)
         return docs[:limit]
+
+    def _fetch_mynet_fallback(self, ticker: str, limit: int) -> list[dict]:
+        """Mynet Finans fallback scraper."""
+        docs = []
+        url = f"https://finans.mynet.com/borsa/hisse/{ticker.lower()}/haberleri/"
+        try:
+            resp = self.session.get(url, timeout=15)
+            soup = BeautifulSoup(resp.text, "html.parser")
+            articles = soup.select(".news-list-item") or soup.select("article")
+            for art in articles[:limit]:
+                link_el = art.find("a")
+                if not link_el: continue
+                href = link_el.get("href", "")
+                title = art.get_text(strip=True)
+                docs.append({
+                    "ticker":      ticker.upper(),
+                    "source_type": "news",
+                    "date":        datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "institution": "Mynet Finans",
+                    "title":       title,
+                    "content":     title,
+                    "url":         href if href.startswith("http") else f"https://finans.mynet.com{href}",
+                    "sentiment":   None,
+                })
+        except Exception: pass
+        return docs
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -214,12 +246,20 @@ class NewsScraper:
     def _normalize_date(raw: str) -> str:
         if not raw:
             return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        # Handle RSS format: "Fri, 17 Apr 2026 13:55:02 GMT"
+        if "," in raw and any(m in raw for m in ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]):
+            try:
+                from email.utils import parsedate_to_datetime
+                dt = parsedate_to_datetime(raw)
+                return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                pass
         for fmt in ["%Y-%m-%dT%H:%M:%S", "%d.%m.%Y %H:%M", "%d.%m.%Y", "%Y-%m-%d", "%b %d, %Y"]:
             try:
                 return datetime.strptime(raw.strip()[:19], fmt).strftime("%Y-%m-%dT%H:%M:%SZ")
             except ValueError:
                 continue
-        return raw
+        return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
     @staticmethod
     def _parse_date(date_str: str) -> datetime:

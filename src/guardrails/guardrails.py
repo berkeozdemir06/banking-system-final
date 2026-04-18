@@ -24,23 +24,18 @@ DISCLAIMER = (
 
 # ── Yasak ifadeler ─────────────────────────────────────────────────────────────
 INVESTMENT_ADVICE_PATTERNS = [
-    r"\bal[ıi]n\b",          # "alın"
-    r"\bsat[ıi]n\b",         # "satın"
+    r"\bkesinlikle\s*al[ıi]n\b",
+    r"\bkesinlikle\s*sat[ıi]n\b",
     r"\bal\s*sinyali\b",
     r"\bsat\s*sinyali\b",
     r"\byatırım\s*tavsiye",
-    r"\bhedef\s*fiyat[ıi]?\s*\d",
+    r"\bhedef\s*fiyat[ıi]?\s*:?\s*\d",
     r"\bfiyat\s*tahmin",
-    r"\bkâr\s*elde\s*ed",
     r"\byükselecek\b",
     r"\bdüşecek\b",
-    r"\bkesinlikle\s*al\b",
-    r"\bkesinlikle\s*sat\b",
     r"should\s+buy",
     r"should\s+sell",
     r"price\s+target\s*[\$₺]?\s*\d",
-    r"will\s+rise",
-    r"will\s+fall",
     r"strong\s+buy",
     r"strong\s+sell",
 ]

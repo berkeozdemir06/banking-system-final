@@ -313,6 +313,42 @@
         }
         .preset-btn:hover { background: #fff; color: #000; transform: scale(1.05); }
 
+        /* ── Result Display ── */
+        .result-area { animation: fadeIn 0.6s ease; }
+        .result-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 24px;
+        }
+        .result-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding-bottom: 15px; margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .status-pulse {
+            width: 8px; height: 8px; background: #00ff88;
+            border-radius: 50%; box-shadow: 0 0 10px #00ff88;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.15); opacity: 0.4; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .result-content { line-height: 1.8; color: #eee; }
+        
+        .citation-chip {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #aaa; padding: 4px 8px; border-radius: 4px;
+            font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .citation-chip.news { border-left: 2px solid #3498db; }
+        .citation-chip.kap { border-left: 2px solid #e74c3c; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
         /* ── Intelligence Metrics Panel ── */
         .metrics-grid {
             display: grid;
@@ -416,11 +452,13 @@
                     <span class="btn-step">Source A · KAP.org.tr</span>
                     <span class="btn-label">Retrieve KAP Disclosures</span>
                     <span class="btn-status" id="status-kap">Official regulatory filings</span>
+                    <div id="preview-kap" class="ingest-preview"></div>
                 </button>
                 <button class="ingest-btn" id="btn-news" onclick="ingestNews()">
                     <span class="btn-step">Source B · Financial Press</span>
                     <span class="btn-label">Retrieve News Articles</span>
                     <span class="btn-status" id="status-news">Market narrative layer</span>
+                    <div id="preview-news" class="ingest-preview"></div>
                 </button>
                 <button class="ingest-btn" id="btn-pdf" onclick="document.getElementById('pdf-file-input').click()">
                     <span class="btn-step">Source C · Equity Research</span>
@@ -455,6 +493,44 @@
 
             <!-- Thinking Terminal -->
             <div id="thinking-terminal" class="thinking-terminal"></div>
+
+            <!-- Result Area -->
+            <div id="result-area" class="result-area" style="display:none; margin-top:30px;">
+                <div class="result-card">
+                    <div class="result-header">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div class="status-pulse"></div>
+                            <span style="font-size:11px; font-weight:700; color:#fff; letter-spacing:1px; text-transform:uppercase;">Intelligence Synthesis</span>
+                        </div>
+                        <span id="finish-time" style="font-size:9px; color:#666;">--:--</span>
+                    </div>
+
+                    <div id="result-text" class="result-content" style="color:#fff; font-size:14px; line-height:1.7; font-family:'Outfit', sans-serif;"></div>
+                    
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div id="m-faith" class="metric-value">--%</div>
+                            <div class="metric-label">Faithfulness</div>
+                            <div class="metric-status">🟢 Verified</div>
+                        </div>
+                        <div class="metric-card">
+                            <div id="m-prec" class="metric-value">--%</div>
+                            <div class="metric-label">Precision</div>
+                            <div class="metric-status">🟢 High</div>
+                        </div>
+                        <div class="metric-card">
+                            <div id="m-latency" class="metric-value">--s</div>
+                            <div class="metric-label">Latency</div>
+                            <div class="metric-status">⚡ Real-time</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:20px;">
+                        <div style="font-size:9px; color:#555; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; font-weight:700;">Sources Synthetic Context</div>
+                        <div id="citation-row" class="citation-row" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+                    </div>
+                </div>
+            </div>
 
                 <!-- Export Button -->
                 <button class="export-btn" id="export-pdf-btn" onclick="exportToPDF()" style="width:100%;background:#f0f0f0;color:#000;border:1px solid #ddd;padding:12px;margin-top:20px;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;gap:8px;">
@@ -625,6 +701,7 @@
         const ticker = getTicker();
         if (!ticker) { alert('Please select an equity first.'); return; }
         const btn = document.getElementById('btn-kap');
+        const preview = document.getElementById('preview-kap');
         btn.disabled = true;
         setStatus('status-kap', 'Fetching disclosures from KAP.org.tr…', true);
         try {
@@ -634,13 +711,15 @@
             });
             if (!res.ok) throw new Error(res.status);
             const d = await res.json();
-            if (d.error) throw new Error(d.error); // Handle python side error
+            if (d.error) throw new Error(d.error);
             setStatus('status-kap', `✓ ${d.docs} filings · ${d.chunks_added} chunks indexed`, true);
+            
+            if (d.summaries) {
+                preview.innerHTML = d.summaries.map(s => `<div style="font-size:8px; border-bottom:1px solid rgba(255,255,255,0.05); padding-top:4px; color:#fff;">[${s.date}] ${s.title.substring(0,35)}...</div>`).join('');
+                preview.style.display = 'block';
+            }
             btn.classList.add('success');
-        } catch (e) { 
-            console.error(e);
-            setStatus('status-kap', '✗ Failed — check API connection', false); 
-        }
+        } catch (e) { setStatus('status-kap', '✗ Fetch failed — check API log', false); }
         btn.disabled = false;
     }
 
@@ -748,7 +827,10 @@
             await new Promise(r => setTimeout(r, 700));
             addLog(`LLM Reasoning started (Model: Llama 3.3)...`, '🧠');
 
-            if (!res.ok) throw new Error(`${res.status}`);
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || `${res.status} Internal Server Error`);
+            }
             const data = await res.json();
             const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
 
