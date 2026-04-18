@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ÖZAS Finance Agent</title>
+    <meta name="theme-color" content="#000000">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=Open+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, html {
+            height: 100vh;
+            font-family: 'Open Sans', Arial, sans-serif;
+            background-color: #000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-image: url('/static/Winter-Sunrise.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }
+
+        .sim-warning-bar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 36px;
+            background: #000;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            z-index: 2000;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .agent-wrapper {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        /* ── Glass card ── */
+        .agent-box {
+            width: 100%;
+            max-width: 760px;
+            background-color: rgba(255,255,255,0.48);
+            backdrop-filter: blur(28px) saturate(170%);
+            -webkit-backdrop-filter: blur(28px) saturate(170%);
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            overflow: visible;
+            margin: auto;
+        }
+
+        .top-section { padding: 38px 60px 32px; }
+
+        /* ── Header ── */
+        .header-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 28px;
+        }
+        .back-btn {
+            background: none; border: none; cursor: pointer;
+            font-family: 'Open Sans', sans-serif; font-size: 12px;
+            color: #666; letter-spacing: 0.5px; padding: 0;
+            transition: color 0.2s; font-weight: 500;
+        }
+        .back-btn:hover { color: #000; }
+        .logo-center { flex: 1; text-align: center; }
+        .logo-jp {
+            font-family: 'Playfair Display', serif;
+            font-size: 30px; color: #000; font-weight: 600; letter-spacing: 4px;
+        }
+        .logo-sub {
+            font-family: 'Open Sans', sans-serif; font-size: 11px;
+            color: #937d65; font-weight: 700; letter-spacing: 2.5px;
+            text-transform: uppercase; display: block; margin-top: 3px;
+        }
+
+        /* ── Section label ── */
+        .section-label {
+            font-size: 10px; font-weight: 700; letter-spacing: 2px;
+            text-transform: uppercase; color: #888;
+            margin-bottom: 10px; margin-top: 22px;
+        }
+
+        /* ── Ticker autocomplete ── */
+        .ticker-wrapper { position: relative; margin-bottom: 6px; }
+        .ticker-search {
+            width: 100%;
+            padding: 14px 18px;
+            font-size: 14px;
+            font-family: 'Open Sans', sans-serif;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            border: 1px solid #555;
+            border-radius: 4px;
+            outline: none;
+            background: #000;
+            color: #fff;
+            transition: box-shadow 0.15s;
+        }
+        .ticker-search::placeholder { color: rgba(255,255,255,0.3); font-weight: 400; letter-spacing: 0.5px; text-transform: none; }
+        .ticker-search:focus { box-shadow: inset 0 0 0 2px rgba(255,255,255,0.4); }
+
+        .ticker-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px); left: 0; right: 0;
+            background: rgba(10,10,10,0.97);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            z-index: 999;
+            max-height: 220px;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        .ticker-dropdown::-webkit-scrollbar { width: 3px; }
+        .ticker-dropdown::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 99px; }
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 11px 18px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            transition: background 0.1s;
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover, .dropdown-item.active { background: rgba(255,255,255,0.06); }
+        .di-code { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: 1px; min-width: 60px; }
+        .di-name { font-size: 12px; color: rgba(255,255,255,0.5); font-weight: 400; }
+
+        /* ── 3-step ingestion row ── */
+        .ingestion-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .ingest-btn {
+            padding: 13px 14px;
+            border: 1px solid rgba(0,0,0,0.18);
+            border-radius: 4px;
+            background: rgba(255,255,255,0.5);
+            cursor: pointer;
+            font-family: 'Open Sans', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: #111;
+            text-align: left;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .ingest-btn:hover { background: rgba(0,0,0,0.07); border-color: rgba(0,0,0,0.35); }
+        .ingest-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .ingest-btn.success { background: rgba(0,0,0,0.07); border-color: #000; }
+        .ingest-btn .btn-label { display: block; }
+        .ingest-btn .btn-step {
+            font-size: 9px; color: #999; letter-spacing: 1px;
+            font-weight: 600; display: block; margin-bottom: 5px;
+        }
+        .ingest-btn .btn-status {
+            font-size: 9px; color: #555; margin-top: 4px; display: block;
+            font-weight: 400; letter-spacing: 0.3px; text-transform: none;
+        }
+
+        /* PDF upload hidden input */
+        #pdf-file-input { display: none; }
+
+        /* ── Divider ── */
+        .divider {
+            border: none;
+            border-top: 1px solid rgba(0,0,0,0.1);
+            margin: 22px 0 0;
+        }
+
+        /* ── Question input ── */
+        .question-area {
+            width: 100%;
+            padding: 16px 18px;
+            font-size: 14px;
+            line-height: 1.65;
+            font-family: 'Open Sans', sans-serif;
+            border: 1px solid #555;
+            border-radius: 4px;
+            outline: none;
+            background: #fff;
+            color: #000;
+            resize: none;
+            transition: box-shadow 0.15s;
+            margin-bottom: 14px;
+        }
+        .question-area::placeholder { color: #aaa; }
+        .question-area:focus { box-shadow: inset 0 0 0 2px #000; }
+
+        /* ── Prompt chips ── */
+        .prompts-row {
+            display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 18px;
+        }
+        .prompt-chip {
+            background: rgba(255,255,255,0.55);
+            border: 1px solid rgba(0,0,0,0.1);
+            border-radius: 3px;
+            padding: 6px 13px;
+            font-size: 11.5px;
+            color: #333;
+            cursor: pointer;
+            font-family: 'Open Sans', sans-serif;
+            transition: all 0.15s;
+        }
+        .prompt-chip:hover { background: rgba(0,0,0,0.06); border-color: rgba(0,0,0,0.25); color: #000; }
+
+        /* ── Analyse button ── */
+        .analyse-btn {
+            width: 100%;
+            background: #0f0f0f; color: #fff;
+            border: none; padding: 17px;
+            font-size: 13px; font-family: 'Open Sans', sans-serif;
+            border-radius: 3px; cursor: pointer;
+            letter-spacing: 2px; font-weight: 700;
+            transition: background 0.25s;
+            display: flex; justify-content: center; align-items: center; gap: 10px;
+        }
+        .analyse-btn:hover { background: #222; }
+        .analyse-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── Result area ── */
+        .result-area { display: none; margin-top: 22px; }
+        .result-divider { border: none; border-top: 1px solid rgba(0,0,0,0.1); margin-bottom: 16px; }
+        .result-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .result-label {
+            font-size: 10px; font-weight: 700; letter-spacing: 2px;
+            text-transform: uppercase; color: #937d65;
+        }
+        .agent-meta {
+            font-size: 10px; color: #aaa; letter-spacing: 0.5px;
+        }
+        .result-text {
+            font-family: 'Open Sans', sans-serif;
+            font-size: 13.5px; line-height: 1.8; color: #111;
+        }
+        .consistency-note {
+            font-size: 12px; color: #444; margin-top: 12px;
+            padding: 10px 14px; border-left: 2px solid #937d65;
+            background: rgba(147,125,101,0.07); border-radius: 0 4px 4px 0;
+        }
+        .sources-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+        .src-chip {
+            font-size: 10px; font-weight: 700; letter-spacing: 1px;
+            text-transform: uppercase; padding: 4px 10px; border-radius: 3px;
+            border: 1px solid rgba(0,0,0,0.15); color: #444;
+            background: rgba(255,255,255,0.65);
+        }
+        .error-text { font-size: 12px; color: #cc0000; margin-top: 10px; }
+
+        /* ── Bottom bar ── */
+        .bottom-bar {
+            padding: 10px 60px 20px;
+            text-align: center;
+            border-top: 1px solid rgba(0,0,0,0.07);
+        }
+        .bottom-bar p {
+            font-family: 'Open Sans', sans-serif; font-size: 10px;
+            color: #000; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner-icon {
+            width: 15px; height: 15px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff; border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @media (max-width: 700px) {
+            .top-section { padding: 28px 24px 24px; }
+            .bottom-bar { padding: 10px 24px 18px; }
+            .ingestion-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="sim-warning-bar">
+    <span>ÖZAS Finance Agent · Academic Simulation · Non-Trading · No Investment Advice Provided</span>
+</div>
+
+<div class="agent-wrapper">
+    <div class="agent-box">
+        <div class="top-section">
+
+            <!-- Header -->
+            <div class="header-row">
+                <button class="back-btn" onclick="window.location.href='/'">← Back</button>
+                <div class="logo-center">
+                    <div class="logo-jp">OZAS</div>
+                    <span class="logo-sub">Finance Agent</span>
+                </div>
+                <div style="width:50px;"></div>
+            </div>
+
+            <!-- Step 1: Ticker -->
+            <div class="section-label">Step 1 — Select Equity</div>
+            <div class="ticker-wrapper">
+                <input class="ticker-search" id="ticker-in" type="text"
+                    placeholder="Search equity — e.g. ASELS, THYAO, GARAN..."
+                    autocomplete="off" oninput="filterTickers()" onkeydown="handleKey(event)">
+                <div class="ticker-dropdown" id="ticker-dropdown"></div>
+            </div>
+
+            <!-- Step 2: Data Ingestion -->
+            <div class="section-label">Step 2 — Ingest Data Sources</div>
+            <div class="ingestion-grid">
+                <button class="ingest-btn" id="btn-kap" onclick="ingestKAP()">
+                    <span class="btn-step">Source A · KAP.org.tr</span>
+                    <span class="btn-label">Retrieve KAP Disclosures</span>
+                    <span class="btn-status" id="status-kap">Official regulatory filings</span>
+                </button>
+                <button class="ingest-btn" id="btn-news" onclick="ingestNews()">
+                    <span class="btn-step">Source B · Financial Press</span>
+                    <span class="btn-label">Retrieve News Articles</span>
+                    <span class="btn-status" id="status-news">Market narrative layer</span>
+                </button>
+                <button class="ingest-btn" id="btn-pdf" onclick="document.getElementById('pdf-file-input').click()">
+                    <span class="btn-step">Source C · Equity Research</span>
+                    <span class="btn-label">Upload Brokerage Report</span>
+                    <span class="btn-status" id="status-pdf">PDF — analyst coverage</span>
+                </button>
+            </div>
+            <input type="file" id="pdf-file-input" accept=".pdf" onchange="ingestPDF(this)">
+
+            <hr class="divider">
+
+            <!-- Step 3: Query -->
+            <div class="section-label" style="margin-top:20px;">Step 3 — Intelligence Query</div>
+            <textarea class="question-area" id="question-in" rows="3"
+                placeholder="e.g. Do recent news articles contradict or confirm the official KAP disclosures? Has the narrative around this company shifted over the past quarter?"
+                onkeydown="if(event.key==='Enter' && event.ctrlKey) runQuery()"></textarea>
+
+            <div class="prompts-row">
+                <div class="prompt-chip" onclick="setPrompt('What types of KAP disclosures has this company published in the last 6 months?')">KAP Disclosure Summary</div>
+                <div class="prompt-chip" onclick="setPrompt('Do recent news articles contradict or align with official KAP disclosures?')">KAP vs News Consistency</div>
+                <div class="prompt-chip" onclick="setPrompt('What common themes appear across recent brokerage research reports?')">Brokerage Themes</div>
+                <div class="prompt-chip" onclick="setPrompt('How has the media narrative around this company changed over the past 3 months?')">Narrative Evolution</div>
+            </div>
+
+            <!-- Analyse -->
+            <button class="analyse-btn" id="analyse-btn" onclick="runQuery()">
+                RUN INTELLIGENCE ANALYSIS
+            </button>
+            <div style="text-align:center;margin-top:8px;font-size:10px;color:#999;letter-spacing:0.5px;">Ctrl + Enter to submit</div>
+
+            <!-- Result -->
+            <div class="result-area" id="result-area">
+                <hr class="result-divider">
+                <div class="result-header">
+                    <div class="result-label" id="result-label">Agent Response</div>
+                    <div class="agent-meta" id="agent-meta"></div>
+                </div>
+                <div class="result-text" id="result-text"></div>
+                <div class="consistency-note" id="consistency-note" style="display:none;"></div>
+                <div class="sources-row" id="sources-row"></div>
+                <div class="error-text" id="error-text" style="display:none;"></div>
+            </div>
+
+        </div>
+
+        <div class="bottom-bar">
+            <p>Non-trading · No investment advice · All data is informational · End-to-end encrypted</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_URL = window.location.origin + '/api/agent';
+
+    // ── BIST Ticker database ──────────────────────────────────────────────────
+    const TICKERS = [
+        { code: 'ASELS', name: 'Aselsan Elektronik' },
+        { code: 'THYAO', name: 'Türk Hava Yolları' },
+        { code: 'GARAN', name: 'Garanti BBVA' },
+        { code: 'EREGL', name: 'Ereğli Demir Çelik' },
+        { code: 'SASA',  name: 'SASA Polyester' },
+        { code: 'BIMAS', name: 'BİM Birleşik Mağazalar' },
+        { code: 'TCELL', name: 'Turkcell' },
+        { code: 'KCHOL', name: 'Koç Holding' },
+        { code: 'AKBNK', name: 'Akbank' },
+        { code: 'YAPBK', name: 'Yapı Kredi Bankası' },
+        { code: 'ISCTR', name: 'İş Bankası' },
+        { code: 'HALKB', name: 'Halkbank' },
+        { code: 'VAKBN', name: 'Vakıfbank' },
+        { code: 'TUPRS', name: 'Tüpraş' },
+        { code: 'TOASO', name: 'Tofaş Otomobil' },
+        { code: 'FROTO', name: 'Ford Otosan' },
+        { code: 'ARCLK', name: 'Arçelik' },
+        { code: 'DOHOL', name: 'Doğan Holding' },
+        { code: 'SAHOL', name: 'Sabancı Holding' },
+        { code: 'PGSUS', name: 'Pegasus Hava Taşımacılığı' },
+        { code: 'EKGYO', name: 'Emlak Konut REIT' },
+        { code: 'MGROS', name: 'Migros Ticaret' },
+        { code: 'KONTR', name: 'Kontrolmatik Teknoloji' },
+        { code: 'OYAKC', name: 'OYAK Çimento' },
+        { code: 'PETKM', name: 'Petkim' },
+        { code: 'KLNMA', name: 'Kalyon Güneş Teknolojileri' },
+    ];
+
+    let selectedTicker = '';
+    let dropdownIndex = -1;
+    let filteredItems = [];
+
+    function filterTickers() {
+        const val = document.getElementById('ticker-in').value.trim().toUpperCase();
+        const dd  = document.getElementById('ticker-dropdown');
+        dropdownIndex = -1;
+
+        if (!val) { dd.style.display = 'none'; return; }
+
+        filteredItems = TICKERS.filter(t =>
+            t.code.startsWith(val) || t.name.toUpperCase().includes(val)
+        );
+
+        // Eğer yazılan ticker listede yoksa, manuel seçecek olarak en başa ekle (Tüm BIST desteği)
+        if (val && !filteredItems.find(t => t.code === val)) {
+            filteredItems.unshift({ code: val, name: 'Tüm BIST / Özel Ticker Araması' });
+        }
+
+        if (!filteredItems.length) { dd.style.display = 'none'; return; }
+
+        dd.innerHTML = filteredItems.map((t, i) => `
+            <div class="dropdown-item" data-i="${i}" onmousedown="pickTicker('${t.code}', '${t.name}')">
+                <span class="di-code">${t.code}</span>
+                <span class="di-name">${t.name}</span>
+            </div>
+        `).join('');
+        dd.style.display = 'block';
+    }
+
+    function pickTicker(code, name) {
+        document.getElementById('ticker-in').value = code;
+        selectedTicker = code;
+        document.getElementById('ticker-dropdown').style.display = 'none';
+    }
+
+    function handleKey(e) {
+        const dd    = document.getElementById('ticker-dropdown');
+        const items = dd.querySelectorAll('.dropdown-item');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            dropdownIndex = Math.min(dropdownIndex + 1, items.length - 1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            dropdownIndex = Math.max(dropdownIndex - 1, 0);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (dropdownIndex >= 0 && filteredItems[dropdownIndex]) {
+                const t = filteredItems[dropdownIndex];
+                pickTicker(t.code, t.name);
+            }
+            return;
+        } else if (e.key === 'Escape') {
+            dd.style.display = 'none'; return;
+        }
+        items.forEach((el, i) => el.classList.toggle('active', i === dropdownIndex));
+        if (items[dropdownIndex]) items[dropdownIndex].scrollIntoView({ block: 'nearest' });
+    }
+
+    document.addEventListener('click', e => {
+        if (!e.target.closest('.ticker-wrapper'))
+            document.getElementById('ticker-dropdown').style.display = 'none';
+    });
+
+    // ── Ingestion helpers ─────────────────────────────────────────────────────
+    function getTicker() {
+        return document.getElementById('ticker-in').value.trim().toUpperCase();
+    }
+
+    function setStatus(id, text, ok) {
+        const el = document.getElementById(id);
+        el.textContent = text;
+        el.style.color = ok ? '#000' : '#cc0000';
+    }
+
+    async function ingestKAP() {
+        const ticker = getTicker();
+        if (!ticker) { alert('Please select an equity first.'); return; }
+        const btn = document.getElementById('btn-kap');
+        btn.disabled = true;
+        setStatus('status-kap', 'Fetching disclosures from KAP.org.tr…', true);
+        try {
+            const res = await fetch(`${API_URL}/ingest/kap`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, limit: 5 })
+            });
+            if (!res.ok) throw new Error(res.status);
+            const d = await res.json();
+            if (d.error) throw new Error(d.error); // Handle python side error
+            setStatus('status-kap', `✓ ${d.docs} filings · ${d.chunks_added} chunks indexed`, true);
+            btn.classList.add('success');
+        } catch (e) { 
+            console.error(e);
+            setStatus('status-kap', '✗ Failed — check API connection', false); 
+        }
+        btn.disabled = false;
+    }
+
+    async function ingestNews() {
+        const ticker = getTicker();
+        if (!ticker) { alert('Please select an equity first.'); return; }
+        const btn = document.getElementById('btn-news');
+        btn.disabled = true;
+        setStatus('status-news', 'Scraping financial press sources…', true);
+        try {
+            const res = await fetch(`${API_URL}/ingest/news`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, limit: 5, days_back: 60 })
+            });
+            if (!res.ok) throw new Error(res.status);
+            const d = await res.json();
+            if (d.error) throw new Error(d.error);
+            setStatus('status-news', `✓ ${d.docs} articles · ${d.chunks_added} chunks indexed`, true);
+            btn.classList.add('success');
+        } catch (e) { 
+            console.error(e);
+            setStatus('status-news', '✗ Failed — check API connection', false); 
+        }
+        btn.disabled = false;
+    }
+
+    async function ingestPDF(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const ticker = getTicker();
+        if (!ticker) { alert('Please select an equity first.'); return; }
+        const btn = document.getElementById('btn-pdf');
+        btn.disabled = true;
+        setStatus('status-pdf', `Processing ${file.name}…`, true);
+        try {
+            const form = new FormData();
+            form.append('file', file);
+            form.append('ticker', ticker);
+            form.append('institution', 'Brokerage Research');
+            const res = await fetch(`${API_URL}/ingest/pdf`, { method: 'POST', body: form });
+            if (!res.ok) throw new Error(res.status);
+            const d = await res.json();
+            setStatus('status-pdf', `✓ ${d.pages} pages · ${d.chunks_added} chunks indexed`, true);
+            btn.classList.add('success');
+        } catch { setStatus('status-pdf', '✗ Upload failed — check file format', false); }
+        btn.disabled = false;
+        input.value = '';
+    }
+
+    // ── Query ─────────────────────────────────────────────────────────────────
+    function setPrompt(p) {
+        document.getElementById('question-in').value = p;
+        document.getElementById('question-in').focus();
+    }
+
+    async function runQuery() {
+        const ticker   = getTicker();
+        const question = document.getElementById('question-in').value.trim();
+        if (!question) { document.getElementById('question-in').focus(); return; }
+
+        const btn = document.getElementById('analyse-btn');
+        btn.innerHTML = '<div class="spinner-icon"></div> Analysing…';
+        btn.disabled = true;
+
+        const resultArea = document.getElementById('result-area');
+        resultArea.style.display = 'none';
+        document.getElementById('error-text').style.display = 'none';
+        document.getElementById('consistency-note').style.display = 'none';
+        document.getElementById('sources-row').innerHTML = '';
+        document.getElementById('agent-meta').textContent = '';
+
+        const t0 = Date.now();
+        try {
+            const res = await fetch(`${API_URL}/query`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question, ticker: ticker || null }),
+            });
+            if (!res.ok) throw new Error(`${res.status}`);
+            const data = await res.json();
+            const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
+
+            let answer = (data.answer || '')
+                .replace('⚠️ Bu sistem yatırım tavsiyesi vermez. Sunulan bilgiler yalnızca bilgi amaçlıdır ve al/sat kararı için kullanılamaz.', '')
+                .replace('⚠️ **Bu sistem yatırım tavsiyesi vermez.** Sunulan bilgiler yalnızca bilgi ve analiz amaçlıdır.', '')
+                .trim();
+
+            const dec = data.decision || {};
+            const srcs = (dec.sources_selected || []).join(' · ').toUpperCase();
+            document.getElementById('result-label').textContent =
+                ticker ? `${ticker} — Agent Response` : 'Agent Response';
+            document.getElementById('agent-meta').textContent =
+                [srcs, dec.time_horizon, `${data.iterations || 1} pass`, `${elapsed}s`].filter(Boolean).join(' · ');
+            document.getElementById('result-text').textContent = answer;
+
+            if (data.consistency_note) {
+                const cn = document.getElementById('consistency-note');
+                cn.textContent = data.consistency_note;
+                cn.style.display = 'block';
+            }
+            if (data.sources && data.sources.length) {
+                const row = document.getElementById('sources-row');
+                const seen = new Set();
+                data.sources.forEach(s => {
+                    if (!seen.has(s.source_type)) {
+                        seen.add(s.source_type);
+                        const chip = document.createElement('span');
+                        chip.className = 'src-chip';
+                        chip.textContent = s.source_type;
+                        row.appendChild(chip);
+                    }
+                });
+            }
+            resultArea.style.display = 'block';
+        } catch (err) {
+            resultArea.style.display = 'block';
+            const errEl = document.getElementById('error-text');
+            errEl.textContent = 'Agent offline — ensure the API server is running on port 8080.';
+            errEl.style.display = 'block';
+        } finally {
+            btn.innerHTML = 'RUN INTELLIGENCE ANALYSIS';
+            btn.disabled = false;
+        }
+    }
+</script>
+</body>
+</html>

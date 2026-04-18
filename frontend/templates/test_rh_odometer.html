@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RH Odometer Test</title>
+    <style>
+        body { background: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 50px; }
+        .rh-price { font-size: 64px; font-weight: 500; display: flex; align-items: baseline; letter-spacing: -2px; }
+        .rh-currency { font-size: 64px; margin-right: 4px; }
+        .rh-odometer { display: inline-flex; height: 1.1em; overflow: hidden; position: relative; }
+        .rh-digit-col { display: flex; flex-direction: column; transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+        .rh-digit { height: 1.1em; display: flex; align-items: center; justify-content: center; width: 0.6em; }
+        .rh-comma, .rh-dot { width: 0.3em; display: flex; justify-content: center; }
+    </style>
+</head>
+<body>
+    <div class="rh-price">
+        <span class="rh-currency">$</span>
+        <div id="price-container" class="rh-odometer"></div>
+    </div>
+    <script>
+        // Custom lightweight odometer that physically mimics Robinhood's digit-by-digit CSS transform
+        class RHOdometer {
+            constructor(el, initialValue) {
+                this.el = el;
+                this.value = initialValue;
+                this.cols = [];
+                this.render(initialValue);
+            }
+            
+            formatStr(val) {
+                return val.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            }
+
+            render(val) {
+                const str = this.formatStr(val);
+                this.el.innerHTML = '';
+                this.cols = [];
+                
+                for(let i=0; i<str.length; i++) {
+                    const char = str[i];
+                    if (char === ',' || char === '.') {
+                        const span = document.createElement('div');
+                        span.className = char === ',' ? 'rh-comma' : 'rh-dot';
+                        span.innerText = char;
+                        this.el.appendChild(span);
+                    } else {
+                        const colBox = document.createElement('div');
+                        colBox.style.overflow = 'hidden';
+                        colBox.style.height = '1.1em';
+                        
+                        const colInner = document.createElement('div');
+                        colInner.className = 'rh-digit-col';
+                        
+                        // We need a strip of numbers 0-9
+                        for(let d=0; d<=9; d++) {
+                            const dSpan = document.createElement('div');
+                            dSpan.className = 'rh-digit';
+                            dSpan.innerText = d;
+                            colInner.appendChild(dSpan);
+                        }
+                        
+                        colBox.appendChild(colInner);
+                        this.el.appendChild(colBox);
+                        
+                        const digitVal = parseInt(char);
+                        this.cols.push({ el: colInner, current: digitVal });
+                        colInner.style.transform = `translateY(-${digitVal * 1.1}em)`;
+                    }
+                }
+            }
+
+            update(newVal) {
+                const oldStr = this.formatStr(this.value);
+                const newStr = this.formatStr(newVal);
+                
+                // If length changed (e.g. 99 to 100), full re-render for simplicity in this mockup
+                if (oldStr.length !== newStr.length) {
+                    this.render(newVal);
+                    this.value = newVal;
+                    return;
+                }
+                
+                let colIdx = 0;
+                for(let i=0; i<newStr.length; i++) {
+                    const char = newStr[i];
+                    if (char !== ',' && char !== '.') {
+                        const targetDigit = parseInt(char);
+                        const colData = this.cols[colIdx];
+                        
+                        if (colData.current !== targetDigit) {
+                            // Find shortest path or just roll to the target in the 0-9 strip
+                            // For a true odometer, we'd need infinite wrapping, but for RH style, 
+                            // they often just slide to the new absolute digit in the 0-9 column.
+                            colData.el.style.transform = `translateY(-${targetDigit * 1.1}em)`;
+                            colData.current = targetDigit;
+                        }
+                        colIdx++;
+                    }
+                }
+                this.value = newVal;
+            }
+        }
+
+        const odo = new RHOdometer(document.getElementById('price-container'), 142.10);
+        
+        setInterval(() => {
+            const move = (Math.random() > 0.5 ? 1 : -1) * 0.05; // tiny cents change
+            odo.update(odo.value + move);
+        }, 2000);
+    </script>
+</body>
+</html>

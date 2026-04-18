@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  bist-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: bist-equity-api
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - NOMIC_API_KEY=${NOMIC_API_KEY}
+      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
+      - MEM0_API_KEY=${MEM0_API_KEY}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      - CHROMA_PATH=/app/data/chroma_db
+      - LLM_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
+      - EMBED_MODEL=nomic-embed-text-v1.5
+      - LOG_LEVEL=INFO
+    volumes:
+      - bist_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  bist-ui:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: bist-equity-ui
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://bist-api:8000
+    depends_on:
+      - bist-api
+    command: ["streamlit", "run", "app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
+    volumes:
+      - bist_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  bist_data:

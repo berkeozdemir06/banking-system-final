@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ozas.banking.backend</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/ozdemir/.gemini/antigravity/scratch/banking_app/start.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>/Users/ozdemir/.gemini/antigravity/scratch/banking_app</string>
+    <key>StandardOutPath</key>
+    <string>/Users/ozdemir/.gemini/antigravity/scratch/banking_app/server_output.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/ozdemir/.gemini/antigravity/scratch/banking_app/server_error.log</string>
+</dict>
+</plist>

@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ../
+      dockerfile: backend/Dockerfile
+    container_name: ozas_backend_monolith
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      - PORT=8000
+      - ENV=production
+    volumes:
+      - ozas_db_data:/app/data
+    
+volumes:
+  ozas_db_data:

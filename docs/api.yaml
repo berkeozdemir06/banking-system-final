@@ -1,0 +1,68 @@
+openapi: 3.0.3
+info:
+  title: ÖZAS Digital Banking Mock API
+  version: 2.1.0
+  description: Internal RESTful structure for core ledger transactions, auth scopes, and live stock market data delivery.
+paths:
+  /auth/login:
+    post:
+      summary: User Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Successful authentication yields Identity Token and Role Scope.
+        '401':
+          description: Incorrect authentication credentials.
+  /trade/spot:
+    post:
+      summary: Execute Spot Market Transaction
+      description: Initiates a buy/sell trade recorded securely inside the isolated append-only `local_db` ledger.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tc_identity:
+                  type: string
+                symbol:
+                  type: string
+                side:
+                  type: string
+                  enum: [buy, sell]
+                price:
+                  type: number
+                quantity:
+                  type: number
+      responses:
+        '200':
+          description: Ledger entry generated successfully.
+  /market/details:
+    get:
+      summary: Retrieves Live High-Frequency Trading Chart points
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: period
+          in: query
+          schema:
+            type: string
+        - name: interval
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A heavily compressed numeric array carrying geometric market coordinates.

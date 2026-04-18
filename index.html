@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BIST RAG — İlerleme Takibi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #0a0f1e;
+      --bg2:       #0f172a;
+      --card:      #111827;
+      --card2:     #1a2340;
+      --gold:      #f5c842;
+      --gold2:     #fde68a;
+      --green:     #22c55e;
+      --blue:      #3b82f6;
+      --purple:    #a855f7;
+      --red:       #ef4444;
+      --border:    rgba(245,200,66,0.15);
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --radius:    14px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────── */
+    header {
+      background: linear-gradient(135deg, #0a0f1e 0%, #0f172a 50%, #0a0f1e 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 36px 48px;
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 30% 50%, rgba(245,200,66,0.06) 0%, transparent 70%),
+                  radial-gradient(ellipse at 80% 20%, rgba(59,130,246,0.06) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .header-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+    .logo-badge {
+      width: 56px; height: 56px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, var(--gold), #f97316);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 0 30px rgba(245,200,66,0.3);
+      flex-shrink: 0;
+    }
+    .header-text h1 {
+      font-size: 1.7rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, var(--gold), var(--gold2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.2;
+    }
+    .header-text p {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 4px;
+    }
+    .header-stats {
+      margin-left: auto;
+      display: flex;
+      gap: 20px;
+    }
+    .stat-box {
+      text-align: center;
+      background: rgba(245,200,66,0.05);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 20px;
+    }
+    .stat-box .num {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--gold);
+    }
+    .stat-box .lbl {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── Progress Bar ─────────────────────────────────── */
+    .progress-bar-wrap {
+      max-width: 1100px;
+      margin: 28px auto 0;
+    }
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .progress-outer {
+      height: 8px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-inner {
+      height: 100%;
+      background: linear-gradient(90deg, var(--gold), #f97316);
+      border-radius: 99px;
+      transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+      box-shadow: 0 0 12px rgba(245,200,66,0.4);
+      width: 0%;
+    }
+
+    /* ── Main Layout ──────────────────────────────────── */
+    main {
+      max-width: 1100px;
+      margin: 40px auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ── Section ──────────────────────────────────────── */
+    .section {
+      margin-bottom: 36px;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .section-icon {
+      width: 40px; height: 40px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .section-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--gold);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .section-count {
+      margin-left: auto;
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Card Grid ────────────────────────────────────── */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 14px;
+    }
+    .card-grid.single {
+      grid-template-columns: 1fr;
+    }
+
+    /* ── Item Card ────────────────────────────────────── */
+    .item {
+      background: var(--card);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      transition: border-color 0.2s, background 0.2s, transform 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+    .item:hover {
+      border-color: rgba(245,200,66,0.2);
+      background: var(--card2);
+      transform: translateY(-1px);
+    }
+    .item.done {
+      border-color: rgba(34,197,94,0.25);
+      background: rgba(34,197,94,0.04);
+    }
+    .item.done::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px; height: 100%;
+      background: var(--green);
+      border-radius: 3px 0 0 3px;
+    }
+
+    .check {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      border: 2px solid rgba(255,255,255,0.12);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.25s;
+      cursor: pointer;
+      font-size: 14px;
+      background: transparent;
+      color: transparent;
+    }
+    .item.done .check {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(34,197,94,0.3);
+    }
+
+    .item-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .item-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.4;
+    }
+    .item.done .item-title {
+      color: var(--green);
+    }
+    .item-sub {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+    .item-tag {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(245,200,66,0.1);
+      color: var(--gold);
+      border: 1px solid rgba(245,200,66,0.2);
+      border-radius: 6px;
+      padding: 2px 7px;
+      margin-top: 8px;
+    }
+    .item-links {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .item-link {
+      font-size: 0.72rem;
+      color: var(--blue);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(59,130,246,0.08);
+      border: 1px solid rgba(59,130,246,0.15);
+      border-radius: 6px;
+      padding: 3px 8px;
+      transition: background 0.15s;
+    }
+    .item-link:hover { background: rgba(59,130,246,0.15); }
+    .item-img-wrap {
+      margin-top: 10px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .item-img-wrap img {
+      width: 100%;
+      display: block;
+      max-height: 160px;
+      object-fit: cover;
+    }
+
+    /* ── Points badge ─────────────────────────────────── */
+    .pts-badge {
+      font-size: 0.7rem;
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(168,85,247,0.1);
+      color: var(--purple);
+      border: 1px solid rgba(168,85,247,0.2);
+      border-radius: 6px;
+      padding: 2px 7px;
+      margin-top: 8px;
+      display: inline-block;
+    }
+
+    /* ── Week pills ──────────────────────────────────── */
+    .week-badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      border-radius: 6px;
+      padding: 2px 8px;
+      margin-right: 4px;
+    }
+    .w1 { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.25); }
+    .w2 { background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.25); }
+
+    /* ── Rubric bar ───────────────────────────────────── */
+    .rubric-bar-wrap { margin-top: 8px; }
+    .rubric-bar-outer {
+      height: 5px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .rubric-bar-inner {
+      height: 100%;
+      background: linear-gradient(90deg, var(--purple), var(--blue));
+      border-radius: 99px;
+    }
+
+    /* ── Divider ─────────────────────────────────────── */
+    .divider {
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      margin: 36px 0;
+    }
+
+    /* ── Footer ──────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 32px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Scroll fade ─────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .section { animation: fadeUp 0.4s ease both; }
+    .section:nth-child(2) { animation-delay: 0.05s; }
+    .section:nth-child(3) { animation-delay: 0.1s;  }
+    .section:nth-child(4) { animation-delay: 0.15s; }
+    .section:nth-child(5) { animation-delay: 0.2s;  }
+
+    /* ── Responsive ───────────────────────────────────── */
+    @media (max-width: 640px) {
+      header { padding: 24px 20px; }
+      .header-stats { display: none; }
+      main { padding: 0 16px 60px; }
+      .card-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo-badge">📈</div>
+    <div class="header-text">
+      <h1>BIST Equity Intelligence Agent</h1>
+      <p>2025-2026 FinTech Ödevi — Agentic RAG for Turkish Equity Markets</p>
+    </div>
+    <div class="header-stats">
+      <div class="stat-box">
+        <div class="num" id="done-count">0</div>
+        <div class="lbl">Tamamlanan</div>
+      </div>
+      <div class="stat-box">
+        <div class="num" id="total-count">0</div>
+        <div class="lbl">Toplam</div>
+      </div>
+      <div class="stat-box">
+        <div class="num" id="pct">0%</div>
+        <div class="lbl">İlerleme</div>
+      </div>
+    </div>
+  </div>
+  <div class="progress-bar-wrap">
+    <div class="progress-meta">
+      <span>Genel İlerleme</span>
+      <span id="progress-label">0 / 0 madde</span>
+    </div>
+    <div class="progress-outer">
+      <div class="progress-inner" id="progress-bar"></div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ══════════════════════════════════════════════════ -->
+  <!-- SECTION 1: Data Sources                          -->
+  <!-- ══════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon" style="background:rgba(245,200,66,0.1); color:var(--gold);">🗄️</div>
+      <span class="section-title">Veri Kaynakları (Zorunlu)</span>
+      <span class="section-count" id="cnt-data">0 / 3</span>
+    </div>
+    <div class="card-grid" id="grp-data">
+
+      <div class="item done" id="item-kap">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">KAP Bildirimleri</div>
+          <div class="item-sub">kap.org.tr'den maddi olay bildirimleri, yönetim kurulu kararları, finansal tablo özetleri.</div>
+          <span class="item-tag">source_type: kap</span>
+          <div class="item-links">
+            <a class="item-link" href="src/ingestion/kap_scraper.py">📄 kap_scraper.py</a>
+            <a class="item-link" href="https://www.kap.org.tr" target="_blank">🌐 kap.org.tr</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-broker">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Aracı Kurum Araştırma Raporları</div>
+          <div class="item-sub">PDF tabanlı equity research raporları — Docling + PyMuPDF ile parse edilir.</div>
+          <span class="item-tag">source_type: brokerage</span>
+          <div class="item-links">
+            <a class="item-link" href="src/ingestion/pdf_parser.py">📄 pdf_parser.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-news">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Finansal Haberler</div>
+          <div class="item-sub">Firecrawl API + HTML fallback — Investing.com TR, Bloomberg HT, Hurriyet Ekonomi.</div>
+          <span class="item-tag">source_type: news</span>
+          <div class="item-links">
+            <a class="item-link" href="src/ingestion/news_scraper.py">📄 news_scraper.py</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <hr class="divider" />
+
+  <!-- ══════════════════════════════════════════════════ -->
+  <!-- SECTION 2: Agentic RAG Design                    -->
+  <!-- ══════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon" style="background:rgba(59,130,246,0.1); color:var(--blue);">🤖</div>
+      <span class="section-title">Agentic RAG Tasarımı</span>
+      <span class="section-count" id="cnt-agent">0 / 4</span>
+    </div>
+    <div class="card-grid" id="grp-agent">
+
+      <div class="item done" id="item-source-sel">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Source Selection (Kaynak Seçimi)</div>
+          <div class="item-sub">LLM destekli otomatik KAP / News / Brokerage seçimi + heuristic fallback.</div>
+          <div class="item-links">
+            <a class="item-link" href="src/agent/bist_agent.py">📄 bist_agent.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-temporal">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Temporal Reasoning (Zaman Farkındalığı)</div>
+          <div class="item-sub">recent / historical / both — 90 günlük tarih penceresi ile date_from filtresi.</div>
+          <div class="item-links">
+            <a class="item-link" href="src/agent/bist_agent.py">📄 bist_agent.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-crossver">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Cross-Source Verification</div>
+          <div class="item-sub">KAP vs haberler örtüşme/çelişki tespiti — LLM destekli kısa tutarlılık raporu.</div>
+          <div class="item-links">
+            <a class="item-link" href="src/agent/bist_agent.py">📄 bist_agent.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-iterative">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Iterative Retrieval (Döngüsel Sorgulama)</div>
+          <div class="item-sub">retrieve → verify → re-retrieve → answer — min 3 kaynak bulunana kadar tekrar.</div>
+          <div class="item-links">
+            <a class="item-link" href="src/agent/bist_agent.py">📄 bist_agent.py</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <hr class="divider" />
+
+  <!-- ══════════════════════════════════════════════════ -->
+  <!-- SECTION 3: Technology Stack (8 Levels)           -->
+  <!-- ══════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon" style="background:rgba(168,85,247,0.1); color:var(--purple);">⚙️</div>
+      <span class="section-title">Teknoloji Stack (8 Katman)</span>
+      <span class="section-count" id="cnt-stack">0 / 8</span>
+    </div>
+    <div class="card-grid" id="grp-stack">
+
+      <div class="item done" id="item-l0">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Level 0 — Deployment</div>
+          <div class="item-sub">Groq (ultra-düşük gecikme) seçildi — Docker + Compose ile deploy hazır.</div>
+          <span class="item-tag">L0</span>
+          <div class="item-links">
+            <a class="item-link" href="docker/Dockerfile">📄 Dockerfile</a>
+            <a class="item-link" href="docker/docker-compose.yml">📄 docker-compose.yml</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-l1">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Level 1 — Evaluation</div>
+          <div class="item-sub">RAGAS — 10 BIST sorusu, Faithfulness + Relevancy + Context metrikleri.</div>
+          <span class="item-tag">L1</span>
+          <div class="item-links">
+            <a class="item-link" href="src/evaluation/ragas_eval.py">📄 ragas_eval.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-l2">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Level 2 — LLMs</div>
+          <div class="item-sub">Groq üzerinde Llama 4 Scout 17B — düşük gecikme, Türkçe desteği güçlü.</div>
+          <span class="item-tag">L2</span>
+          <div class="item-links">
+            <a class="item-link" href="src/agent/bist_agent.py">📄 bist_agent.py</a>
+            <a class="item-link" href="https://groq.com" target="_blank">🌐 groq.com</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-l3">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Level 3 — Framework</div>
+          <div class="item-sub">LangChain + LangChain-Groq — mesaj zinciri, streaming, tool entegrasyonu.</div>
+          <span class="item-tag">L3</span>
+          <div class="item-links">
+            <a class="item-link" href="src/api/main.py">📄 main.py</a>
+            <a class="item-link" href="src/agent/bist_agent.py">📄 bist_agent.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-l4">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Level 4 — Vector Database</div>
+          <div class="item-sub">ChromaDB — cosine similarity, zorunlu metadata: ticker · source_type · date · institution</div>
+          <span class="item-tag">L4</span>
+          <div class="item-links">
+            <a class="item-link" href="src/vectordb/chroma_store.py">📄 chroma_store.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-l5">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Level 5 — Embeddings</div>
+          <div class="item-sub">Nomic embed-text-v1.5 (Türkçe dost, ücretsiz) + OpenAI fallback. Chunk: 800 char / 120 overlap.</div>
+          <span class="item-tag">L5</span>
+          <div class="item-links">
+            <a class="item-link" href="src/embeddings/embedder.py">📄 embedder.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-l6">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Level 6 — Data Extraction</div>
+          <div class="item-sub">Firecrawl (HTML) + Docling (PDF) — kap_scraper + pdf_parser + news_scraper yazıldı.</div>
+          <span class="item-tag">L6</span>
+          <div class="item-links">
+            <a class="item-link" href="src/ingestion/kap_scraper.py">📄 kap_scraper.py</a>
+            <a class="item-link" href="src/ingestion/pdf_parser.py">📄 pdf_parser.py</a>
+            <a class="item-link" href="src/ingestion/news_scraper.py">📄 news_scraper.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-l7">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Level 7 — Memory</div>
+          <div class="item-sub">Mem0 + local JSON fallback — kısa/uzun vadeli bellek, 30 günlük purge politikası.</div>
+          <span class="item-tag">L7</span>
+          <div class="item-links">
+            <a class="item-link" href="src/agent/memory.py">📄 memory.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-l8">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Level 8 — Alignment & Guardrails</div>
+          <div class="item-sub">Zorunlu çıktı: "Bu sistem yatırım tavsiyesi vermez."</div>
+          <span class="item-tag">L8</span>
+          <div class="item-links"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <hr class="divider" />
+
+  <!-- ══════════════════════════════════════════════════ -->
+  <!-- SECTION 4: Week 1 Tasks                          -->
+  <!-- ══════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon" style="background:rgba(59,130,246,0.1); color:#60a5fa;">📅</div>
+      <span class="section-title">Hafta 1 — Knowledge Base</span>
+      <span class="section-count" id="cnt-w1">0 / 5</span>
+    </div>
+    <div class="card-grid" id="grp-w1">
+
+      <div class="item done" id="item-w1-ingest">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <span class="week-badge w1">Hafta 1</span>
+          <div class="item-title" style="margin-top:6px">Veri Toplama (Data Ingestion)</div>
+          <div class="item-sub">KAP scraper, News scraper ve PDF parser tamamlandı ✅</div>
+          <div class="item-links">
+            <a class="item-link" href="src/ingestion/kap_scraper.py">📄 kap_scraper.py</a>
+            <a class="item-link" href="src/ingestion/news_scraper.py">📄 news_scraper.py</a>
+            <a class="item-link" href="src/ingestion/pdf_parser.py">📄 pdf_parser.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-w1-embed">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <span class="week-badge w1">Hafta 1</span>
+          <div class="item-title" style="margin-top:6px">Embedding Pipeline</div>
+          <div class="item-sub">Nomic embed-text-v1.5 + RecursiveCharacterTextSplitter tamamlandı ✅</div>
+          <div class="item-links">
+            <a class="item-link" href="src/embeddings/embedder.py">📄 embedder.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-w1-vdb">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <span class="week-badge w1">Hafta 1</span>
+          <div class="item-title" style="margin-top:6px">VectorDB Kurulumu</div>
+          <div class="item-sub">ChromaDB persistent store, cosine sim, metadata filtresi tamamlandı ✅</div>
+          <div class="item-links">
+            <a class="item-link" href="src/vectordb/chroma_store.py">📄 chroma_store.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-w1-api">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <span class="week-badge w1">Hafta 1</span>
+          <div class="item-title" style="margin-top:6px">Temel RAG API</div>
+          <div class="item-sub">FastAPI — /query, /ingest/kap, /ingest/news, /ingest/pdf, /stats ✅</div>
+          <div class="item-links">
+            <a class="item-link" href="src/api/main.py">📄 main.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-w1-demo">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <span class="week-badge w1">Hafta 1</span>
+          <div class="item-title" style="margin-top:6px">Hafta 1 Demo</div>
+          <div class="item-sub">FastAPI üzerinden /query ile ASELS KAP özetleme — sisteme hazır ✅</div>
+          <div class="item-links">
+            <a class="item-link" href="src/api/main.py">📄 main.py</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <hr class="divider" />
+
+  <!-- ══════════════════════════════════════════════════ -->
+  <!-- SECTION 5: Week 2 Tasks                          -->
+  <!-- ══════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon" style="background:rgba(168,85,247,0.1); color:#c084fc;">🚀</div>
+      <span class="section-title">Hafta 2 — Agentic Intelligence</span>
+      <span class="section-count" id="cnt-w2">0 / 6</span>
+    </div>
+    <div class="card-grid" id="grp-w2">
+
+      <div class="item done" id="item-w2-srclogic">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <span class="week-badge w2">Hafta 2</span>
+          <div class="item-title" style="margin-top:6px">Source Selection Logic</div>
+          <div class="item-sub">Agent'ın hangi kaynağa bakacağına otomatik karar vermesi.</div>
+          <div class="item-links"></div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-w2-mem">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <span class="week-badge w2">Hafta 2</span>
+          <div class="item-title" style="margin-top:6px">Memory Entegrasyonu</div>
+          <div class="item-sub">Mem0 + local fallback, short/long-term, 30 gün purge politikası ✅</div>
+          <div class="item-links">
+            <a class="item-link" href="src/agent/memory.py">📄 memory.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-w2-guard">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <span class="week-badge w2">Hafta 2</span>
+          <div class="item-title" style="margin-top:6px">Guardrails Ekleme</div>
+          <div class="item-sub">18 regex pattern, strict/soft mod, otomatik disclaimer ✅</div>
+          <div class="item-links">
+            <a class="item-link" href="src/guardrails/guardrails.py">📄 guardrails.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-w2-eval">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <span class="week-badge w2">Hafta 2</span>
+          <div class="item-title" style="margin-top:6px">Evaluation (10 BIST Sorusu)</div>
+          <div class="item-sub">RAGAS — 10 BIST sorusu: Q01-Q10, Faithfulness/Relevancy/Recall/Precision ✅</div>
+          <div class="item-links">
+            <a class="item-link" href="src/evaluation/ragas_eval.py">📄 ragas_eval.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-w2-docker">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <span class="week-badge w2">Hafta 2</span>
+          <div class="item-title" style="margin-top:6px">Docker & GitHub</div>
+          <div class="item-sub">Konteynerizasyon ve kaynak kodun GitHub'a yüklenmesi.</div>
+          <div class="item-links"></div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-w2-demo">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <span class="week-badge w2">Hafta 2</span>
+          <div class="item-title" style="margin-top:6px">Final Demo</div>
+          <div class="item-sub">Tüm pipeline hazır — Ticker → KAP+Haberler+Rapor → Narratif → Cited cevap+Disclaimer ✅</div>
+          <div class="item-links">
+            <a class="item-link" href="src/agent/bist_agent.py">📄 bist_agent.py</a>
+            <a class="item-link" href="src/api/main.py">📄 main.py</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <hr class="divider" />
+
+  <!-- ══════════════════════════════════════════════════ -->
+  <!-- SECTION 6: Evaluation Rubric                     -->
+  <!-- ══════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon" style="background:rgba(239,68,68,0.1); color:#f87171;">🏆</div>
+      <span class="section-title">Değerlendirme Rubriği (100 Puan)</span>
+      <span class="section-count" id="cnt-rubric">0 / 7</span>
+    </div>
+    <div class="card-grid" id="grp-rubric">
+
+      <div class="item done" id="item-r-data">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Veri Çeşitliliği</div>
+          <div class="item-sub">KAP + Haberler + PDF Brokerage — 3 kaynak türü entegre edildi.</div>
+          <div class="rubric-bar-wrap">
+            <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px">20 / 100 puan</div>
+            <div class="rubric-bar-outer"><div class="rubric-bar-inner" style="width:20%"></div></div>
+          </div>
+          <div class="item-links">
+            <a class="item-link" href="src/ingestion/kap_scraper.py">📄 kap</a>
+            <a class="item-link" href="src/ingestion/news_scraper.py">📄 news</a>
+            <a class="item-link" href="src/ingestion/pdf_parser.py">📄 pdf</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-r-retrieval">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Retrieval Kalitesi</div>
+          <div class="item-sub">ChromaDB cosine sim + metadata filtresi + RAGAS faithfulness metrikleri.</div>
+          <div class="rubric-bar-wrap">
+            <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px">20 / 100 puan</div>
+            <div class="rubric-bar-outer"><div class="rubric-bar-inner" style="width:20%"></div></div>
+          </div>
+          <div class="item-links">
+            <a class="item-link" href="src/vectordb/chroma_store.py">📄 chroma_store.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-r-agent">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Agentic Logic</div>
+          <div class="item-sub">Source selection + temporal + cross-source + iterative retrieval — tam döngü yazıldı.</div>
+          <div class="rubric-bar-wrap">
+            <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px">15 / 100 puan</div>
+            <div class="rubric-bar-outer"><div class="rubric-bar-inner" style="width:15%"></div></div>
+          </div>
+          <div class="item-links">
+            <a class="item-link" href="src/agent/bist_agent.py">📄 bist_agent.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-r-mem">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Memory & Narrative</div>
+          <div class="item-sub">Bellek entegrasyonu ve narratif analiz kalitesi.</div>
+          <div class="rubric-bar-wrap">
+            <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px">10 / 100 puan</div>
+            <div class="rubric-bar-outer"><div class="rubric-bar-inner" style="width:10%"></div></div>
+          </div>
+          <div class="item-links"></div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-r-ethics">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Ethics & Guardrails</div>
+          <div class="item-sub">Yatırım tavsiyesi yasağı ve disclaimer uygulaması.</div>
+          <div class="rubric-bar-wrap">
+            <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px">15 / 100 puan</div>
+            <div class="rubric-bar-outer"><div class="rubric-bar-inner" style="width:15%"></div></div>
+          </div>
+          <div class="item-links"></div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-r-eval">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Evaluation Raporu</div>
+          <div class="item-sub">10 BIST sorusu (Q01-Q10) — RAGAS ile JSON rapor üretimi.</div>
+          <div class="rubric-bar-wrap">
+            <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px">10 / 100 puan</div>
+            <div class="rubric-bar-outer"><div class="rubric-bar-inner" style="width:10%"></div></div>
+          </div>
+          <div class="item-links">
+            <a class="item-link" href="src/evaluation/ragas_eval.py">📄 ragas_eval.py</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item done" id="item-r-demo">
+        <div class="check">✓</div>
+        <div class="item-body">
+          <div class="item-title">Demo & Dokümantasyon</div>
+          <div class="item-sub">Canlı demo sunumu ve GitHub README dokümantasyonu.</div>
+          <div class="rubric-bar-wrap">
+            <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px">10 / 100 puan</div>
+            <div class="rubric-bar-outer"><div class="rubric-bar-inner" style="width:10%"></div></div>
+          </div>
+          <div class="item-links"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  BIST Equity Intelligence Agent · 2025-2026 FinTech Ödevi · İlerleme Takip Paneli
+</footer>
+
+<script>
+  // ── State management ───────────────────────────────────────
+  const STORAGE_KEY = 'bist-rag-progress';
+
+  // All item IDs grouped
+  const groups = {
+    'cnt-data':   ['item-kap','item-broker','item-news'],
+    'cnt-agent':  ['item-source-sel','item-temporal','item-crossver','item-iterative'],
+    'cnt-stack':  ['item-l0','item-l1','item-l2','item-l3','item-l4','item-l5','item-l6','item-l7','item-l8'],
+    'cnt-w1':     ['item-w1-ingest','item-w1-embed','item-w1-vdb','item-w1-api','item-w1-demo'],
+    'cnt-w2':     ['item-w2-srclogic','item-w2-mem','item-w2-guard','item-w2-eval','item-w2-docker','item-w2-demo'],
+    'cnt-rubric': ['item-r-data','item-r-retrieval','item-r-agent','item-r-mem','item-r-ethics','item-r-eval','item-r-demo'],
+  };
+
+  const allIds = Object.values(groups).flat();
+
+  // Load saved state
+  let state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+
+  // ── Initialize ─────────────────────────────────────────────
+  function init() {
+    allIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      // ✅ HTML'de zaten 'done' yazılıysa state'e yaz (localStorage boşsa)
+      if (el.classList.contains('done') && !state[id]) {
+        state[id] = true;
+      }
+
+      if (state[id]) applyDone(el);
+
+      // Tamamlanan kutucuğa tıklayınca → ilk linke git
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('a')) return;
+        const isDone = el.classList.contains('done');
+        if (isDone) {
+          const firstLink = el.querySelector('.item-link');
+          if (firstLink) {
+            window.open(firstLink.getAttribute('href'), '_blank');
+          }
+        }
+      });
+    });
+
+    // Güncel state'i kaydet
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    updateStats();
+  }
+
+  function applyDone(el) {
+    el.classList.add('done');
+    el.querySelector('.check').textContent = '✓';
+    el.style.cursor = 'pointer';
+    const firstLink = el.querySelector('.item-link');
+    if (firstLink) {
+      el.title = `→ ${firstLink.textContent.trim()} dosyasını aç`;
+    }
+  }
+
+  function removeDone(el) {
+    el.classList.remove('done');
+    el.querySelector('.check').textContent = '';
+    el.style.cursor = 'default';
+    el.title = '';
+  }
+
+  // ── Stats ──────────────────────────────────────────────────
+  function updateStats() {
+    const total = allIds.length;
+    const done  = allIds.filter(id => state[id]).length;
+    const pct   = total ? Math.round(done / total * 100) : 0;
+
+    document.getElementById('done-count').textContent  = done;
+    document.getElementById('total-count').textContent = total;
+    document.getElementById('pct').textContent         = pct + '%';
+    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('progress-label').textContent = `${done} / ${total} madde`;
+
+    // Group counts
+    Object.entries(groups).forEach(([cntId, ids]) => {
+      const d = ids.filter(id => state[id]).length;
+      const el = document.getElementById(cntId);
+      if (el) el.textContent = `${d} / ${ids.length}`;
+    });
+  }
+
+  init();
+</script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+# ── Core Framework ─────────────────────────────────────────
+langchain
+langchain-community
+langchain-groq
+langchain-chroma
+langchain-nomic
+
+# ── LLM & Embeddings ──────────────────────────────────────
+groq
+nomic
+openai
+
+# ── Vector Database ────────────────────────────────────────
+chromadb
+
+# ── Data Extraction ────────────────────────────────────────
+firecrawl-py
+docling
+requests
+beautifulsoup4
+lxml
+
+# ── Memory ────────────────────────────────────────────────
+mem0ai
+
+# ── Guardrails ────────────────────────────────────────────
+guardrails-ai
+
+# ── Evaluation ────────────────────────────────────────────
+ragas
+deepeval
+
+# ── Observability ─────────────────────────────────────────
+langsmith
+langfuse
+
+# ── API ───────────────────────────────────────────────────
+fastapi
+uvicorn
+pydantic
+
+# ── Utils ─────────────────────────────────────────────────
+python-dotenv
+rich
+pandas
+tqdm
+streamlit
+python-multipart

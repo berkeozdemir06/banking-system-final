@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+data/
+docker/data/
+*.sqlite3
+chromadb/
+.env
+.DS_Store

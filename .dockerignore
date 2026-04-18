@@ -1,0 +1,11 @@
+.git
+.github
+.vscode
+venv
+__pycache__
+*.log
+local_db.json
+ngrok
+ngrok.tgz
+.env
+.DS_Store

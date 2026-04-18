@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ÖZAS | Portfolyo</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="/static/icon_512.png">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js');
+            });
+        }
+    </script>
+    <!-- Google Fonts for accurate OZAS typography styling -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=Open+Sans:wght@400;600&display=swap"
+        rel="stylesheet">
+
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            font-family: 'Open Sans', Arial, sans-serif;
+            background-color: #000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+
+            /* Background image settings */
+            background-image: url('/static/Winter-Sunrise.jpg');
+            background-size: cover;
+            /* Spread evenly across screen */
+            background-position: center;
+            /* Center alignment */
+            background-repeat: no-repeat;
+            /* Strictly no repeat */
+            background-attachment: fixed;
+            /* Keep fixed when scrolling */
+        }
+
+        .login-wrapper {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* Liquid Glass (Glassmorphism) Effect */
+        .login-box {
+            width: 100%;
+            max-width: 540px;
+            background-color: rgba(255, 255, 255, 0.45);
+            /* Semi-transparent white (Whiter balance) */
+            backdrop-filter: blur(25px) saturate(160%);
+            -webkit-backdrop-filter: blur(25px) saturate(160%);
+            border-radius: 12px;
+            /* Slightly more rounded for modern feel */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            /* Inner glass border */
+            box-shadow: 0 15px 45px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+            text-align: center;
+            transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+            max-height: 800px; /* For animation */
+            transform-origin: center top;
+            will-change: max-height, opacity, transform;
+        }
+
+        .hidden-card {
+            opacity: 0 !important;
+            max-height: 0 !important;
+            margin: 0 !important;
+            border-width: 0 !important;
+            transform: scale(0.9) translateY(20px) !important;
+            pointer-events: none;
+        }
+
+        .focused-card {
+            transform: scale(1.03) !important;
+            box-shadow: 0 35px 70px rgba(0, 0, 0, 0.4) !important;
+            z-index: 20 !important;
+            cursor: default !important;
+        }
+
+        .top-section {
+            padding: 50px 60px 45px 60px;
+            background-color: transparent;
+        }
+
+        .logo-container {
+            margin-bottom: 20px;
+            /* Significantly reduced margin */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-jp {
+            font-family: 'Playfair Display', serif;
+            font-size: 48px;
+            /* Enlarged size */
+            color: #000000;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .logo-pb {
+            font-family: 'Open Sans', sans-serif;
+            font-size: 20px;
+            /* Enlarged size */
+            color: #937d65;
+            font-weight: 600;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            padding-top: 8px;
+        }
+
+        h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 22px;
+            color: #111;
+            font-weight: 400;
+            margin: 0 0 35px 0;
+            letter-spacing: 0.5px;
+        }
+
+        /* Toggle Buttons */
+        .client-toggle {
+            display: flex;
+            width: 100%;
+            border: 1px solid #555;
+            border-radius: 4px;
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+
+        .toggle-btn {
+            flex: 1;
+            padding: 16px 0;
+            font-size: 15px;
+            font-family: 'Open Sans', sans-serif;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s ease;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        .toggle-us {
+            background-color: #ffffff;
+            color: #000000;
+        }
+
+        .toggle-non-us {
+            background-color: #000000;
+            color: #ffffff;
+            border-left: 1px solid #555;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toggle-non-us:focus {
+            background-color: #ffffff;
+        }
+
+        .toggle-btn:hover,
+        .toggle-btn:focus {
+            color: #00C807;
+            box-shadow: inset 0 0 0 2px #00C807;
+            z-index: 2;
+        }
+
+        /* Login inputs: Username (white) + Password (black) side-by-side */
+        .login-row {
+            display: flex;
+            flex-direction: row;
+            width: 100%;
+            margin-bottom: 30px;
+            gap: 0;
+            border: 1px solid #555;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .login-input-username,
+        .login-input-password {
+            width: 50%;
+            padding: 16px 20px;
+            font-size: 15px;
+            font-family: 'Open Sans', sans-serif;
+            border: none;
+            outline: none;
+            box-sizing: border-box;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .login-input-username {
+            background-color: #ffffff;
+            color: #000000;
+        }
+
+        .login-input-password {
+            background-color: #000000;
+            color: #ffffff;
+            border-left: 1px solid #555;
+        }
+
+        .login-input-username::placeholder {
+            color: #999;
+            transition: color 0.3s ease;
+        }
+
+        .login-input-password::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+            transition: color 0.3s ease;
+        }
+
+        /* Focus states managed via JS or simple class toggle */
+        .input-active-white {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
+
+        .input-active-white::placeholder {
+            color: #999 !important;
+        }
+
+        .input-active-black {
+            background-color: #000000 !important;
+            color: #ffffff !important;
+        }
+
+        .input-active-black::placeholder {
+            color: rgba(255, 255, 255, 0.5) !important;
+        }
+
+        .login-row .login-input-username:focus,
+        .login-row .login-input-password:focus {
+            box-shadow: inset 0 0 0 2px #00C807;
+            z-index: 1;
+        }
+
+        /* Sign In Button */
+        .sign-in-btn {
+            width: 100%;
+            background-color: #0f0f0f;
+            color: #ffffff;
+            border: none;
+            padding: 18px;
+            font-size: 16px;
+            font-family: 'Open Sans', sans-serif;
+            border-radius: 2px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 58px;
+        }
+
+        .sign-in-btn:hover {
+            background-color: #00C807;
+            color: #000000;
+        }
+
+        /* DYNAMIC BUTTON ERROR STATE */
+        .sign-in-btn.btn-error {
+            background-color: #cc0000 !important;
+            color: #ffffff !important;
+            font-size: 13px;
+            font-weight: 700;
+            pointer-events: none;
+        }
+
+        /* Bottom Grey Section */
+        .bottom-section {
+            background-color: #e8e6e1;
+            /* Grey/beige background */
+            padding: 40px 60px;
+            text-align: left;
+        }
+
+        .bottom-text {
+            font-family: 'Open Sans', sans-serif;
+            font-size: 16px;
+            line-height: 1.6;
+            color: #1a1a1a;
+            margin: 0 0 20px 0;
+        }
+
+        .bottom-link {
+            font-family: 'Open Sans', sans-serif;
+            font-size: 15px;
+            color: #111;
+            text-decoration: none;
+            border-bottom: 1px solid #111;
+            padding-bottom: 1px;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            transition: all 0.2s ease;
+        }
+
+        .bottom-link:hover {
+            color: #00C807;
+            border-bottom-color: #00C807;
+        }
+
+        /* Custom Select */
+        .custom-select {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-color: #000000;
+            color: #ffffff;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 15px top 50%;
+            background-size: 14px auto;
+            border: 1px solid #555;
+        }
+
+        .custom-select:focus {
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2300C807' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            color: #00C807;
+            box-shadow: inset 0 0 0 2px #00C807;
+            z-index: 2;
+        }
+
+        /* Option Colors */
+        .custom-select option {
+            background-color: #000000;
+            color: #ffffff;
+        }
+
+        /* Checkbox */
+        .checkbox-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 25px;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .custom-checkbox {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: #000;
+            cursor: pointer;
+            position: relative;
+            display: inline-block;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .custom-checkbox:checked {
+            background-color: #00C807;
+            border-color: #00C807;
+        }
+
+        .custom-checkbox:checked::after {
+            content: '';
+            position: absolute;
+            left: 6px;
+            top: 2px;
+            width: 5px;
+            height: 10px;
+            border: solid #000;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
+        .custom-checkbox:focus {
+            box-shadow: 0 0 0 2px rgba(0, 200, 7, 0.3);
+            outline: none;
+        }
+
+        .sign-in-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: #0f0f0f;
+            color: #ffffff;
+        }
+
+        .sign-in-btn:disabled:hover {
+            background-color: #0f0f0f;
+            color: #ffffff;
+        }
+
+
+        /* Mobile Responsiveness */
+        @media (max-width: 600px) {
+            .top-section {
+                padding: 40px 25px 35px 25px;
+            }
+
+            .bottom-section {
+                padding: 35px 25px;
+            }
+
+            .logo-jp {
+                font-size: 26px;
+            }
+
+            .h2 {
+                font-size: 19px;
+            }
+
+            .login-row {
+                flex-direction: column !important;
+                border-radius: 8px !important;
+            }
+
+            .login-input-username,
+            .login-input-password {
+                width: 100% !important;
+                border-left: none !important;
+                border-bottom: 1px solid #555;
+            }
+
+            .login-input-password {
+                border-bottom: none;
+            }
+        }
+
+        /* reCAPTCHA Overlay Styles */
+        .recaptcha-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.4);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .recaptcha-popup {
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 320px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4285f4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Local CAPTCHA Styles */
+        .captcha-box {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+
+        .captcha-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 16px;
+            text-align: center;
+            letter-spacing: 2px;
+            margin-top: 10px;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        .captcha-input:focus {
+            border-color: #00C807;
+            box-shadow: 0 0 0 2px rgba(0, 200, 7, 0.2);
+        }
+
+        .captcha-btn {
+            background: #222;
+            color: white;
+            border: none;
+            padding: 10px;
+            width: 100%;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 10px;
+            transition: background 0.2s;
+        }
+
+        .captcha-btn:hover {
+            background: #00C807;
+            color: black;
+        }
+
+        .captcha-refresh {
+            font-size: 12px;
+            color: #666;
+            text-decoration: underline;
+            cursor: pointer;
+            margin-top: 8px;
+            display: inline-block;
+        }
+        .sim-warning-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 36px;
+            background-color: #000000;
+            color: #FFFFFF;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            z-index: 2000;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .sim-warning-bar span {
+            opacity: 0.85;
+        }
+
+        /* CYBER-PREMIUM LOADING SCREEN */
+        .loading-screen {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; /* PURE BLACK BACKGROUND */
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 50000;
+            color: #fff;
+            font-family: 'Open Sans', sans-serif;
+            overflow: hidden;
+        }
+
+        /* GIGANTIC WHITE ODOMETER (Cinematic Soft Glow) */
+        .odometer-container {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 70px;
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 130px; /* Even bigger */
+            font-weight: 900;
+            overflow: hidden;
+            height: 160px;
+            line-height: 160px;
+            user-select: none;
+        }
+
+        .odometer-column {
+            display: flex;
+            flex-direction: column;
+            /* Ultra-smooth slow-settle transition */
+            transition: transform 1.2s cubic-bezier(0.65, 0, 0.35, 1);
+        }
+        .odometer-char {
+            height: 160px;
+            color: #ffffff;
+            /* Multi-layered soft white neon glow */
+            text-shadow: 
+                0 0 10px rgba(255, 255, 255, 0.4),
+                0 0 25px rgba(255, 255, 255, 0.2),
+                0 0 45px rgba(255, 255, 255, 0.1);
+            text-align: center;
+            width: 110px;
+            letter-spacing: -4px;
+        }
+
+        #loader-success {
+            font-family: 'Outfit', sans-serif;
+            font-size: 14px;
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: 8px;
+            text-transform: uppercase;
+            margin-top: -20px;
+            opacity: 0;
+            transition: all 0.8s ease;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
+            transform: translateY(10px);
+        }
+
+        #loader-success.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+
+        .loader-text {
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            color: #ffffff;
+            margin-bottom: 25px;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.4);
+            transition: all 0.5s ease;
+        }
+
+        .progress-container {
+            width: 300px;
+            height: 2px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 30px;
+        }
+
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background: #ffffff;
+            box-shadow: 0 0 15px #fff, 0 0 30px rgba(255,255,255,0.6);
+            transition: width 0.5s ease;
+        }
+
+        .terminal-logs {
+            font-family: monospace;
+            font-size: 10px;
+            color: rgba(255,255,255,0.4);
+            height: 60px;
+            overflow: hidden;
+            text-align: left;
+            width: 400px;
+            line-height: 1.6;
+        }
+
+        .log-line {
+            display: block;
+            opacity: 0;
+            animation: logFade 0.3s forwards;
+            white-space: nowrap;
+        }
+
+        @keyframes logFade {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* SECURITY VERIFICATION STYLES (Image-Match CAPTCHA) */
+        .captcha-box {
+            position: relative;
+            background: #e0f2fe; /* Light blue tint matching image */
+            border: 1px solid #bae6fd;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-family: 'Playfair Display', serif;
+            font-size: 38px;
+            font-weight: 900;
+            color: #111;
+            user-select: none;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+            /* Speckle Noise + Wavy Line */
+            background-image: 
+                radial-gradient(#333 1px, transparent 1px), 
+                radial-gradient(#444 1px, transparent 1px),
+                url('data:image/svg+xml;utf8,<svg viewBox="0 0 500 100" xmlns="http://www.w3.org/2000/svg"><path d="M0,50 Q125,10 250,50 T500,50" fill="none" stroke="black" stroke-width="2" opacity="0.4"/></svg>');
+            background-size: 15px 15px, 20px 20px, 100% 100%;
+            background-position: 0 0, 5px 5px, 0 0;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+        }
+
+        .captcha-box::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            /* Thin random scratches */
+            background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23n)" opacity="0.1"/></svg>');
+        }
+
+        .captcha-char {
+            display: inline-block;
+            transition: all 0.3s;
+            filter: contrast(1.5) brightness(0.8);
+            text-shadow: 1px 1px 0px rgba(255,255,255,0.5);
+        }
+
+        .captcha-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 16px;
+            text-align: center;
+            letter-spacing: 2px;
+            margin-top: 10px;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        .captcha-input:focus {
+            border-color: #00C807;
+            box-shadow: 0 0 0 2px rgba(0, 200, 7, 0.2);
+        }
+
+        .captcha-btn {
+            background: #222;
+            color: white;
+            border: none;
+            padding: 10px;
+            width: 100%;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 10px;
+            transition: background 0.2s;
+        }
+
+        .captcha-btn:hover {
+            background: #00C807;
+            color: black;
+        }
+        /* ENHANCED ERROR STYLES */
+        .error-shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+            transform: translate3d(0, 0, 0);
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        #login-error-msg {
+            display: none !important; /* Fully hidden as we use button feedback now */
+        }
+    </style>
+</head>
+
+<body>
+    <div class="sim-warning-bar">
+        <span>WARNING: This is a banking simulation developed for academic purposes. No real financial services or transactions are provided. All data is fictional.</span>
+    </div>
+    <div class="login-wrapper" style="flex-direction: column !important; gap: 30px !important; transition: gap 0.6s cubic-bezier(0.25, 1, 0.5, 1);">
+        
+        <!-- NEW CARD: OZAS FINANCE AGENT (TOP) -->
+        <div class="login-box" id="card-agent" style="background-color: rgba(15, 15, 15, 0.65) !important; border: 1px solid rgba(255, 255, 255, 0.08) !important; cursor: pointer;">
+            <div class="top-section" style="padding: 50px 60px 45px 60px;">
+                <div style="display:flex; justify-content:center; align-items:center; margin-bottom:30px;">
+                    <span class="logo-jp" style="letter-spacing:3px; color:#fff;">OZAS</span>
+                    <span class="logo-pb" style="font-size:22px; color:#fff; text-transform:none; margin-left: 8px;">Finance Agent</span>
+                </div>
+                <style>
+                    #init-agent-btn {
+                        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    }
+                    #init-agent-btn:hover {
+                        background-color: #e53935 !important;
+                        color: #ffffff !important;
+                        box-shadow: 0 4px 15px rgba(229, 57, 53, 0.4);
+                        transform: translateY(-2px);
+                    }
+                </style>
+                <button type="button" class="sign-in-btn" id="init-agent-btn" style="background-color: #fff; color: #000; font-weight: 700; cursor: pointer;" onclick="window.location.href='/agent'">INITIALIZE AGENT</button>
+            </div>
+        </div>
+
+        <div class="login-box" id="card-bank" style="background: rgba(255, 255, 255, 0.70) !important; backdrop-filter: blur(40px) saturate(150%) !important; -webkit-backdrop-filter: blur(40px) saturate(150%) !important; border: 1px solid rgba(255, 255, 255, 0.5) !important; cursor: pointer;">
+            <!-- Top Section (Cream colored) -->
+            <div class="top-section">
+                <!-- OZAS Logo Section -->
+                <div class="logo-container">
+                    <span class="logo-jp" style="letter-spacing: 3px; color: #000;">OZAS</span>
+                    <span class="logo-pb" style="font-size: 22px; color: #000; text-transform: none;">Digital
+                        Banking</span>
+                </div>
+
+                <div id="login-view">
+                    <!-- Username + Password side by side (reference layout) -->
+                    <div class="login-row">
+                        <input type="text" id="login-username" class="login-input-username" placeholder="TC Identity / Username"
+                            autocomplete="username">
+                        <input type="password" id="login-password" class="login-input-password" placeholder="Password"
+                            autocomplete="current-password">
+                    </div>
+                    <div id="login-error-msg"></div>
+
+                    <!-- Black Sign In Button -->
+                    <button type="button" class="sign-in-btn" id="login-btn">SIGN IN</button>
+
+                    <div style="margin-top: 15px;">
+                        <a href="#" id="show-register" class="bottom-link"
+                            style="font-size: 14px; border-bottom: none; color: #000; font-weight: 600;">Create an
+                            account</a>
+                    </div>
+                </div>
+
+                <div id="register-view" style="display: none;">
+                    <div class="client-toggle" style="justify-content: center; margin-bottom: 15px;">
+                        <input type="text" id="reg-fullname" class="toggle-btn toggle-non-us"
+                            style="width: 100%; text-align: left; padding-left: 20px; border: none; font-weight: 700;"
+                            placeholder="Full Name (First & Last)">
+                    </div>
+
+                    <div class="client-toggle" style="justify-content: center; margin-bottom: 15px;">
+                        <input type="text" id="tc-input" class="toggle-btn toggle-non-us"
+                            style="width: 100%; text-align: left; padding-left: 20px; border: none;"
+                            placeholder="T.C. Identity Number" maxlength="11"
+                            spellcheck="false" autocomplete="off">
+                    </div>
+                    <div id="tc-error"
+                        style="color:red; font-size:11px; text-align:left; margin-bottom:15px; display:none;">Please enter your real TC identity number.</div>
+
+
+
+                    <div class="client-toggle" style="justify-content: center; margin-bottom: 15px;">
+                        <input type="password" id="reg-password" class="toggle-btn toggle-non-us"
+                            style="width: 100%; text-align: left; padding-left: 20px; border: none;"
+                            placeholder="Create Password">
+                    </div>
+
+                    <div class="client-toggle" style="justify-content: center; margin-bottom: 15px;">
+                        <select class="toggle-btn toggle-non-us custom-select"
+                            style="width: 100%; text-align: left; padding-left: 16px; border: none;">
+                            <option value="" disabled selected>Country of Residence</option>
+                            <option value="TR">Turkey</option>
+                            <option value="US">United States</option>
+                            <option value="UK">United Kingdom</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="terms-checkbox" class="custom-checkbox">
+                        <span
+                            style="font-family: 'Open Sans', sans-serif; font-size: 13px; color: #333; line-height: 1.4; display: inline-block;">
+                            I have read and agree to the Terms of Service and Privacy Policy.
+                        </span>
+                    </label>
+
+                    <button class="sign-in-btn" id="register-btn" disabled>Create an account</button>
+
+                    <div style="margin-top: 15px;">
+                        <a href="#" id="show-login" class="bottom-link"
+                            style="font-size: 14px; border-bottom: none; color: #555;">Back to Sign In</a>
+                    </div>
+                </div>
+            </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Interactive Card Selection Script -->
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const cardAgent = document.getElementById('card-agent');
+            const cardBank = document.getElementById('card-bank');
+            const wrapper = document.querySelector('.login-wrapper');
+
+            function selectCard(selected, hidden) {
+                // Ignore if already focused
+                if (selected.classList.contains('focused-card')) return;
+                
+                // Remove smooth gap from wrapper so they slide instantly to center
+                wrapper.style.gap = '0px';
+
+                selected.classList.add('focused-card');
+                selected.style.cursor = 'default';
+                
+                hidden.classList.add('hidden-card');
+            }
+
+            function resetCards() {
+                // Ignore if neither is focused
+                if (!cardAgent.classList.contains('focused-card') && !cardBank.classList.contains('focused-card')) return;
+                
+                wrapper.style.gap = '30px !important';
+                
+                cardAgent.classList.remove('focused-card', 'hidden-card');
+                cardBank.classList.remove('focused-card', 'hidden-card');
+                
+                cardAgent.style.cursor = 'pointer';
+                cardBank.style.cursor = 'pointer';
+            }
+
+            cardAgent.addEventListener('click', function(e) {
+                selectCard(cardAgent, cardBank);
+            });
+            cardAgent.addEventListener('focusin', function(e) {
+                selectCard(cardAgent, cardBank);
+            });
+
+            cardBank.addEventListener('click', function(e) {
+                selectCard(cardBank, cardAgent);
+            });
+            cardBank.addEventListener('focusin', function(e) {
+                selectCard(cardBank, cardAgent);
+            });
+
+            // Revert when clicking outside the cards
+            document.addEventListener('click', function(e) {
+                if (!cardAgent.contains(e.target) && !cardBank.contains(e.target)) {
+                    resetCards();
+                }
+            });
+        });
+    </script>
+
+    <!-- Security Verification Overlay -->
+    <div class="recaptcha-overlay" id="recaptcha-overlay">
+        <div class="recaptcha-popup" style="flex-direction:column; padding: 25px;">
+            <div style="width:100%; text-align:left; margin-bottom:15px;">
+                <h3 style="margin:0; font-family:'Open Sans', sans-serif; font-size:16px; color:#222;">Security Verification</h3>
+                <p style="margin:5px 0 0 0; font-family:'Open Sans', sans-serif; font-size:12px; color:#666;">
+                    Please enter the code shown below to verify you are not a robot.
+                </p>
+            </div>
+
+            <div class="captcha-box" id="captcha-display">000000</div>
+
+            <input type="text" id="captcha-input" class="captcha-input" placeholder="Enter Code"
+                autocomplete="off" maxlength="6" style="letter-spacing: 8px; font-weight: 800; font-size: 20px;">
+            <div id="captcha-error" style="color:red; font-size:12px; margin-top:8px; display:none;">Security Error: Invalid verification code.</div>
+
+            <button type="button" class="captcha-btn" id="captcha-submit">VERIFY & SIGN IN</button>
+            <div style="font-size: 11px; color: #666; text-decoration: underline; cursor: pointer; margin-top: 10px;" onclick="generateSecurityCode()">Refresh Code</div>
+        </div>
+    </div>
+
+    <!-- PREMIUM LOADING OVERLAY (Odometer Edition) -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="odometer-container" id="odometer-brand">
+            <!-- Columns will be injected via JS -->
+        </div>
+        
+        
+
+        <div class="loader-text" id="loader-status">Initializing Secure Tunnel</div>
+        
+        <div class="progress-container">
+            <div id="loader-progress" class="progress-bar"></div>
+        </div>
+
+        <div id="terminal-logs" class="terminal-logs">
+            <!-- Dynamic logs will appear here -->
+        </div>
+
+        <div style="margin-top: 40px; font-size: 9px; color: rgba(255,255,255,0.4); letter-spacing: 2px; text-transform: uppercase; text-shadow: 0 0 5px rgba(255,255,255,0.2);">
+            AES-256-GCM Hardware Encrypted Session
+        </div>
+    </div>
+
+
+    <!-- 🔓 SEALED & VERIFIED: Login Security & UI Logic -->
+    <!-- Status: Production Ready | UI: Liquid Glass & Refined Typography | Logic: CAPTCHA Verified -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const loginView = document.getElementById('login-view');
+            const registerView = document.getElementById('register-view');
+            const showRegisterBtn = document.getElementById('show-register');
+            const showLoginBtn = document.getElementById('show-login');
+
+            const termsCheckbox = document.getElementById('terms-checkbox');
+            const registerBtn = document.getElementById('register-btn');
+            const tcInput = document.getElementById('tc-input');
+            
+            // Smart TC Input handler: allow * only as the 4th char after 3 digits
+            window.handleTCInput = function(el) {
+                let val = el.value.replace(/[^0-9*]/g, '');
+                if (val.includes('*')) {
+                    const starIdx = val.indexOf('*');
+                    // Allow * only as the 4th character (index 3) AND total length must be 4
+                    if (starIdx !== 3 || val.length > 4) {
+                        val = val.replace('*', '');
+                    }
+                }
+                el.value = val;
+            };
+            
+            const tcError = document.getElementById('tc-error');
+            const loginBtn = document.getElementById('login-btn');
+            const usernameInput = document.getElementById('login-username');
+            const passwordInput = document.getElementById('login-password');
+
+            // Focus interaction for color swapping
+            usernameInput.addEventListener('focus', () => {
+                usernameInput.classList.remove('input-active-black');
+                usernameInput.classList.add('input-active-white');
+                passwordInput.classList.remove('input-active-white');
+                passwordInput.classList.add('input-active-black');
+                resetLoginButton(); // Reset error on focus
+            });
+
+            passwordInput.addEventListener('focus', () => {
+                passwordInput.classList.remove('input-active-black');
+                passwordInput.classList.add('input-active-white');
+                usernameInput.classList.remove('input-active-white');
+                usernameInput.classList.add('input-active-black');
+                resetLoginButton(); // Reset error on focus
+            });
+
+            // Security Code Logic
+            let currentSecurityCode = "";
+            const captchaInput = document.getElementById('captcha-input');
+            const captchaError = document.getElementById('captcha-error');
+
+            window.generateSecurityCode = function() {
+                const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; 
+                let code = "";
+                for(let i=0; i<6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+                
+                currentSecurityCode = code;
+                
+                const display = document.getElementById('captcha-display');
+                if (display) {
+                    display.innerHTML = '';
+                    code.split('').forEach(char => {
+                        const span = document.createElement('span');
+                        span.className = 'captcha-char';
+                        span.innerText = char;
+                        const rotation = (Math.random() * 24 - 12);
+                        const skew = (Math.random() * 12 - 6);
+                        const yShift = (Math.random() * 8 - 4);
+                        const fontSize = (Math.random() * 10 + 32); 
+                        span.style.transform = `rotate(${rotation}deg) skew(${skew}deg) translateY(${yShift}px)`;
+                        span.style.fontSize = fontSize + 'px';
+                        span.style.fontWeight = Math.random() > 0.5 ? '900' : '700';
+                        display.appendChild(span);
+                    });
+                }
+            }
+
+            // Dynamic Button Feedback Logic
+            let loginErrorTimer = null;
+            const originalLoginBtnText = loginBtn.innerText;
+
+            function resetLoginButton() {
+                if (loginBtn.classList.contains('btn-error')) {
+                    if (loginErrorTimer) clearTimeout(loginErrorTimer);
+                    loginBtn.classList.remove('btn-error', 'error-shake');
+                    loginBtn.innerText = originalLoginBtnText;
+                    loginErrorTimer = null;
+                }
+            }
+
+            function flashButtonError(message) {
+                if (loginErrorTimer) clearTimeout(loginErrorTimer);
+                
+                loginBtn.innerText = message;
+                loginBtn.classList.add('btn-error', 'error-shake');
+                
+                loginErrorTimer = setTimeout(() => {
+                    resetLoginButton();
+                }, 3500); 
+            }
+
+            // Overlay display on Login Click
+            loginBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const username = usernameInput.value.trim();
+                const password = passwordInput.value;
+
+                if (loginBtn.classList.contains('btn-error')) return;
+
+                if(!username || !password) {
+                    flashButtonError("PLEASE ENTER ALL CREDENTIALS");
+                    return;
+                }
+
+                try {
+                    const resp = await fetch('/auth/login', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({username, password})
+                    });
+
+                    const data = await resp.json();
+
+                    if(resp.ok) {
+                        localStorage.setItem('active_tc', data.tc_identity);
+                        // Store token in cookie for server-side auth guard on /dashboard
+                        if (data.token) {
+                            document.cookie = `ozas_token=${data.token}; path=/; max-age=7200; SameSite=Lax`;
+                        }
+                        document.getElementById('captcha-input').value = '';
+                        document.getElementById('captcha-error').style.display = 'none';
+                        document.getElementById('recaptcha-overlay').style.display = 'flex';
+                        generateSecurityCode();
+                    } else {
+                        if(data.detail === "USER_NOT_FOUND") {
+                            flashButtonError("IDENTITY NOT RECOGNIZED");
+                        } else if(data.detail === "INCORRECT_PASSWORD") {
+                            flashButtonError("INVALID PASSWORD ACCESS");
+                        } else {
+                            flashButtonError("AUTHENTICATION FAILED");
+                        }
+                    }
+                } catch(err) {
+                    flashButtonError("SERVER CONNECTION FAILED");
+                }
+            });
+
+            // Security code logic is handled directly in the overlay or via generateSecurityCode()
+            window.refreshCaptcha = function() {
+                captchaInput.value = '';
+                captchaError.style.display = 'none';
+                generateSecurityCode();
+                captchaInput.focus();
+            };
+
+            // Submission Logic (Security Code Verify)
+            document.getElementById('captcha-submit').addEventListener('click', () => {
+                const userVal = document.getElementById('captcha-input').value.trim().toUpperCase();
+                if (userVal === currentSecurityCode.toUpperCase()) {
+                    document.getElementById('captcha-submit').innerHTML = 'VERIFIED ✓';
+                    document.getElementById('captcha-submit').style.background = '#00C807';
+                    document.getElementById('captcha-submit').style.color = '#000';
+                    
+                    setTimeout(() => {
+                        document.getElementById('recaptcha-overlay').style.display = 'none';
+                        const loadingScreen = document.getElementById('loading-screen');
+                        const loaderStatus = document.getElementById('loader-status');
+                        const progressBar = document.getElementById('loader-progress');
+                        const odometerContainer = document.getElementById('odometer-brand');
+                        const logContainer = document.getElementById('terminal-logs');
+
+                        loadingScreen.style.display = 'flex';
+
+                        // Initialize Odometer Columns
+                        const target = "OZAS";
+                        const charSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+                        odometerContainer.innerHTML = '';
+                        
+                        const columns = target.split('').map((finalChar, idx) => {
+                            const col = document.createElement('div');
+                            col.className = 'odometer-column';
+                            
+                            // Create a strip of random chars ending with the target
+                            let strip = "";
+                            for(let i=0; i<15; i++) {
+                                const randomChar = charSet[Math.floor(Math.random() * charSet.length)];
+                                strip += `<div class="odometer-char">${randomChar}</div>`;
+                            }
+                            strip += `<div class="odometer-char">${finalChar}</div>`;
+                            col.innerHTML = strip;
+                            odometerContainer.appendChild(col);
+                            return col;
+                        });
+
+                        function addLog(msg) {
+                            const line = document.createElement('div');
+                            line.className = 'log-line';
+                            line.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+                            logContainer.prepend(line);
+                        }
+
+                        // Rolling Step Sequence
+                        const steps = [
+                            { t: "ENCRYPTING USER IDENTITY", p: 20, l: "Generating AES-256 Master Key...", rollIdx: 0 },
+                            { t: "SECURING ASSETS", p: 45, l: "Wrapping ledger data in SHA-512... OK", rollIdx: 1 },
+                            { t: "ESTABLISHING TUNNEL", p: 65, l: "Connection to Secure Vault established.", rollIdx: 2 },
+                            { t: "VALIDATING PROTOCOLS", p: 85, l: "RBAC Policies Loaded. Compliance: PCI-DSS", rollIdx: 3 },
+                            { t: "MOUNTING INTERFACE", p: 100, l: "Synchronizing workspace modules...", rollIdx: -1 }
+                        ];
+
+                        steps.forEach((s, i) => {
+                            setTimeout(() => {
+                                loaderStatus.innerText = s.t;
+                                progressBar.style.width = s.p + "%";
+                                addLog(s.l);
+                                
+                                // Spin the corresponding column to final position
+                                if(s.rollIdx !== -1) {
+                                    columns[s.rollIdx].style.transform = `translateY(-${15 * 160}px)`;
+                                }
+
+                                // Handle Final State Transformation
+                                if(s.p === 100) {
+                                    setTimeout(() => {
+                                        loaderStatus.style.letterSpacing = "10px";
+                                        loaderStatus.style.color = "#ffffff";
+                                        loaderStatus.innerText = "SUCCESSFUL";
+                                        loaderStatus.style.textShadow = "0 0 20px #fff";
+                                    }, 400);
+                                }
+                            }, i * 450); // Optimized Turbo Speed (450ms)
+                        });
+
+                        setTimeout(() => {
+                            window.location.href = '/dashboard';
+                        }, 2500); // Snappier Redirect (2.5s)
+
+                    }, 600);
+                } else {
+                    document.getElementById('captcha-error').style.display = 'block';
+                    document.getElementById('captcha-input').style.borderColor = 'red';
+                    document.getElementById('captcha-input').value = '';
+                    document.getElementById('captcha-input').focus();
+                }
+            });
+
+            // View Toggles
+            showRegisterBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                loginView.style.display = 'none';
+                registerView.style.display = 'block';
+            });
+
+            showLoginBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                registerView.style.display = 'none';
+                loginView.style.display = 'block';
+            });
+
+            // Math validation for TC (Official Turkish Algoritm)
+            function validateTC(tcNO) {
+                // Privacy Bypass Rule: 3-digit number + * (e.g. 123*)
+                if (tcNO.length === 4 && tcNO.endsWith('*')) {
+                    const prefix = tcNO.slice(0, 3);
+                    return /^\d{3}$/.test(prefix);
+                }
+
+                if (tcNO.length !== 11) return false;
+                if (tcNO[0] === '0') return false;
+
+                const digits = tcNO.split('').map(Number);
+                
+                // Rule 1: (sum(1,3,5,7,9) * 7 - sum(2,4,6,8)) % 10 should be 10th digit
+                const sumOdds = digits[0] + digits[2] + digits[4] + digits[6] + digits[8];
+                const sumEvens = digits[1] + digits[3] + digits[5] + digits[7];
+                const tenth = (((sumOdds * 7) - sumEvens) % 10 + 10) % 10;
+                if (tenth !== digits[9]) return false;
+
+                // Rule 2: sum(1..10) % 10 should be 11th digit
+                const totalSum = digits.slice(0, 10).reduce((a, b) => a + b, 0);
+                if (totalSum % 10 !== digits[10]) return false;
+
+                return true;
+            }
+
+            // Terms Checkbox Enable/Disable logic
+            termsCheckbox.addEventListener('change', (e) => {
+                registerBtn.disabled = !e.target.checked;
+            });
+
+            registerBtn.addEventListener('click', async (e) => {
+                const tcVal = tcInput.value.trim();
+                const nameVal = document.getElementById('reg-fullname').value.trim();
+                const passVal = document.getElementById('reg-password').value;
+                const residenceEl = document.querySelector('.custom-select');
+                const tcErrorEl = document.getElementById('tc-error');
+
+                // RESET UI
+                tcErrorEl.style.display = 'none';
+                tcInput.style.border = 'none';
+
+                // 1. TC Validation (Algorithm or Bypass)
+                if (!validateTC(tcVal)) {
+                    tcErrorEl.innerText = "Please enter your real TC identity number.";
+                    tcErrorEl.style.display = 'block';
+                    tcInput.style.border = '1px solid red';
+                    return;
+                }
+
+                // 2. Password Complexity Validation
+                // 2. Password Complexity Validation (8+ chars, 1 uppercase, 1 symbol)
+                const passRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$/;
+                if (!passRegex.test(passVal)) {
+                    tcErrorEl.innerHTML = `<div style="text-align:left;">Password must be 8+ characters with 1 uppercase & 1 symbol.</div>`;
+                    tcErrorEl.style.display = 'block';
+                    return;
+                }
+
+                try {
+                    const resp = await fetch('/auth/register', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            tc_identity: tcVal,
+                            full_name: nameVal,
+                            password: passVal,
+                            residence: residenceEl ? residenceEl.value : '',
+                            time: new Date().toISOString()
+                        })
+                    });
+
+                    const data = await resp.json();
+                    if(resp.ok) {
+                        localStorage.setItem('active_tc', tcVal);
+                        localStorage.setItem('active_name', data.full_name || 'USER');
+                        window.location.href = '/dashboard';
+                    } else {
+                        tcErrorEl.innerText = data.detail || "Registration failed.";
+                        tcErrorEl.style.display = 'block';
+                    }
+                } catch(err) {
+                    tcErrorEl.innerText = "System busy. Please try again in 30 seconds.";
+                    tcErrorEl.style.display = 'block';
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

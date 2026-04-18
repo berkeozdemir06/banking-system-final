@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Ozas Mobile">
+    <link rel="apple-touch-icon" href="https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/OS_X_El_Capitan_logo.png/1200px-OS_X_El_Capitan_logo.png">
+    <title>Ozas Mobile</title>
+    
+    <style>
+        :root {
+            --ios-bg: #000000;
+            --ios-card: #1C1C1E;
+            --ios-text: #FFFFFF;
+            --ios-subtext: #8E8E93;
+            --ios-blue: #0A84FF;
+            --ios-green: #30D158;
+            --ios-red: #FF453A;
+            --ios-separator: #38383A;
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--ios-bg);
+            color: var(--ios-text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            padding-top: env(safe-area-inset-top, 44px);
+            padding-bottom: env(safe-area-inset-bottom, 34px);
+            overflow-x: hidden;
+        }
+
+        /* Views */
+        #login-view, #admin-dashboard-view, #user-dashboard-view { display: none; }
+        
+        .container { padding: 20px; box-sizing: border-box; }
+        .login-container { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; }
+        
+        .ios-input {
+            background: var(--ios-card); border: none; padding: 16px;
+            border-radius: 12px; width: 100%; color: white;
+            font-size: 17px; margin-bottom: 20px; box-sizing: border-box;
+        }
+        
+        .ios-button {
+            background: var(--ios-blue); color: white; border: none;
+            padding: 16px; border-radius: 12px; width: 100%;
+            font-size: 17px; font-weight: 600; margin-top: 10px; cursor: pointer;
+        }
+        
+        .ios-button.green { background: var(--ios-green); }
+        
+        .header {
+            padding: 10px 20px; font-size: 34px; font-weight: 800; letter-spacing: -1px;
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            background: rgba(0,0,0,0.7); position: sticky; top: env(safe-area-inset-top, 0);
+            z-index: 100; border-bottom: 1px solid var(--ios-separator);
+        }
+        
+        .section-title { font-size: 20px; font-weight: 700; padding: 20px 20px 10px; text-transform: uppercase; color: var(--ios-subtext); letter-spacing: 0.5px; }
+        .list-group { background: var(--ios-card); border-radius: 10px; margin: 0 20px; overflow: hidden; }
+        
+        .list-item { padding: 16px; border-bottom: 1px solid var(--ios-separator); display: flex; justify-content: space-between; align-items: center; }
+        .list-item:last-child { border-bottom: none; }
+        .list-item.column { flex-direction: column; align-items: flex-start; }
+        
+        .metric-value { font-size: 22px; font-weight: 600; color: var(--ios-blue); }
+        .user-tc { font-size: 17px; font-weight: 500; }
+        .user-bal { font-size: 17px; color: var(--ios-green); }
+        
+        .log-item { padding: 12px 16px; border-bottom: 1px solid var(--ios-separator); }
+        .log-item:last-child { border-bottom: none; }
+        .log-user { font-size: 14px; font-weight: 600; color: var(--ios-blue); }
+        .log-action { font-size: 16px; margin: 4px 0; }
+        .log-time { font-size: 12px; color: var(--ios-subtext); }
+        
+        .success-badge { color: var(--ios-green); font-size: 12px; font-weight: 700; }
+        .fail-badge { color: var(--ios-red); font-size: 12px; font-weight: 700; }
+    </style>
+</head>
+<body>
+
+    <!-- SECURE LOGIN -->
+    <div id="login-view" class="login-container" style="display:flex;">
+        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#0A84FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:20px;">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+        <h1 style="margin-bottom: 30px;">Ozas Network</h1>
+        <input type="password" id="admin-pin" class="ios-input" placeholder="Identity or PIN" autocomplete="off" onkeydown="if(event.key==='Enter') login()">
+        <button class="ios-button" onclick="login()">Authenticate</button>
+        <p id="err" style="color:var(--ios-red); margin-top:20px; display:none; font-weight:600;"></p>
+    </div>
+
+    <!-- ROOT ADMIN DASHBOARD -->
+    <div id="admin-dashboard-view">
+        <div class="header">Root Admin</div>
+        
+        <div class="section-title">Global Metrics</div>
+        <div class="list-group">
+            <div class="list-item"><span>Network Liquidity</span><span class="metric-value" id="m-liq">0.00 ₺</span></div>
+            <div class="list-item"><span>Active Ledger Nodes</span><span class="metric-value" id="m-users" style="color:var(--ios-text)">0</span></div>
+            <div class="list-item"><span>Secured Loans Issued</span><span class="metric-value" id="m-loans" style="color:var(--ios-red)">0.00 ₺</span></div>
+            <div class="list-item column" style="background-color: rgba(10, 132, 255, 0.1);">
+                <span style="color:var(--ios-subtext); font-size:14px;">Master Vault IBAN (Receives Funds)</span>
+                <span class="metric-value" id="m-admin-iban" style="font-family:monospace; font-size:16px; margin-top:5px; color:var(--ios-blue);">-</span>
+            </div>
+            <div class="list-item"><span>Vault Balance</span><span class="metric-value" id="m-admin-bal" style="color:var(--ios-green)">0.00 ₺</span></div>
+        </div>
+
+        <div class="section-title">Client Roster</div>
+        <div class="list-group" id="admin-user-list"></div>
+
+        <div class="section-title">Webhook Management (6.3.4)</div>
+        <div class="list-group" style="padding:20px;">
+            <input type="text" id="webhook-url" class="ios-input" placeholder="Listener URL (e.g. webhook.site)">
+            <div style="display:flex; gap:10px;">
+                <button class="ios-button" style="margin-top:0;" onclick="subscribeWebhook()">Subscribe</button>
+                <button class="ios-button green" style="margin-top:0;" onclick="testWebhook()">Test Event</button>
+            </div>
+            <div id="webhook-status" style="margin-top:15px; font-size:14px; color:var(--ios-subtext);">
+                Subscribers: <span id="webhook-sub-count">0</span>
+            </div>
+        </div>
+
+        <div class="section-title">External Event Log (6.3.5)</div>
+        <div id="webhook-history-list" class="list-group" style="border: 1px dashed var(--ios-separator); background: transparent;"></div>
+
+        <div class="section-title">System Audit Trail</div>
+        <div class="list-group" style="margin-bottom:40px;" id="admin-audit-list"></div>
+    </div>
+
+    <!-- USER P2P DASHBOARD -->
+    <div id="user-dashboard-view">
+        <div class="header">My Accounts</div>
+        
+        <div class="section-title">Asset Summary</div>
+        <div class="list-group">
+            <div class="list-item column">
+                <span style="color:var(--ios-subtext); font-size:14px;">Available Balance</span>
+                <span class="metric-value" style="font-size:36px; color:white; margin-top:5px;" id="u-bal">0.00 ₺</span>
+            </div>
+            <div class="list-item column">
+                <span style="color:var(--ios-subtext); font-size:14px;">Your Official IBAN</span>
+                <span style="font-family:monospace; font-size:16px; margin-top:5px; color:var(--ios-blue);" id="u-iban">-</span>
+            </div>
+        </div>
+
+        <div class="section-title">P2P Internal Transfer</div>
+        <div class="list-group" style="padding:20px;">
+            <input type="text" id="tr-iban" class="ios-input" placeholder="Receiver IBAN (TR...)" style="margin-bottom:10px;">
+            <input type="number" id="tr-amount" class="ios-input" placeholder="Amount (₺)" style="margin-bottom:20px;">
+            <button class="ios-button green" onclick="sendMoney()" id="btn-send">Send Money</button>
+            <p id="tr-msg" style="margin-top:15px; font-size:14px; display:none;"></p>
+        </div>
+
+        <div class="section-title">Ledger History</div>
+        <div class="list-group" style="margin-bottom:40px;" id="u-ledger"></div>
+    </div>
+
+    <script>
+        let currentUser = null;
+        let pollInterval = null;
+
+        async function login() {
+            const pin = document.getElementById('admin-pin').value;
+            const isRoot = (pin === '0635' || pin === 'admin' || pin === '11111111110');
+            const attemptTc = pin === '0635' ? 'admin' : pin;
+
+            try {
+                if (isRoot) {
+                    document.getElementById('login-view').style.display = 'none';
+                    document.getElementById('admin-dashboard-view').style.display = 'block';
+                    loadAdminState(attemptTc);
+                    pollInterval = setInterval(() => loadAdminState(attemptTc), 500);
+                } else if (pin.length === 11 && !isNaN(pin)) {
+                    // Load User State
+                    const resp = await fetch(`/state/load?tc=${pin}`);
+                    const data = await resp.json();
+                    
+                    if (data.tc_identity) {
+                        currentUser = data.tc_identity;
+                        document.getElementById('login-view').style.display = 'none';
+                        document.getElementById('user-dashboard-view').style.display = 'block';
+                        renderUserDashboard(data);
+                        // Also auto-refresh user dashboard
+                        pollInterval = setInterval(async () => {
+                            const ref = await fetch(`/state/load?tc=${currentUser}`);
+                            renderUserDashboard(await ref.json());
+                        }, 3000);
+                    } else {
+                        showError("Identity not found.");
+                    }
+                } else {
+                    showError("Invalid PIN / Identity Format");
+                }
+            } catch(e) {
+                showError("Network Error");
+            }
+        }
+
+        function showError(msg) {
+            const err = document.getElementById('err');
+            err.innerText = msg;
+            err.style.display = 'block';
+            setTimeout(() => err.style.display = 'none', 3000);
+        }
+
+        async function loadAdminState(tc) {
+            const resp = await fetch(`/admin/system_state?tc_identity=${tc}`);
+            const data = await resp.json();
+            
+            if (data.status === 'SUCCESS') {
+                document.getElementById('m-liq').innerText = data.system_metrics.total_liquidity.toLocaleString() + ' ₺';
+                if (data.system_metrics) {
+                    console.log("Admin State Data:", data.system_metrics);
+                    document.getElementById('m-admin-bal').innerText = (data.system_metrics.admin_vault_balance || 0).toLocaleString() + ' ₺';
+                    // The following two lines refer to elements not present in the HTML,
+                    // and are likely typos in the instruction. Keeping the original logic for existing elements.
+                    // document.getElementById('m-total-liq').innerText = (data.system_metrics.total_liquidity || 0).toLocaleString() + ' ₺';
+                    // document.getElementById('m-user-count').innerText = data.system_metrics.user_count || 0;
+                }
+                document.getElementById('m-users').innerText = data.system_metrics.user_count;
+                document.getElementById('m-loans').innerText = data.system_metrics.total_loans_issued.toLocaleString() + ' ₺';
+                document.getElementById('m-admin-iban').innerText = data.system_metrics.admin_vault_iban;
+                document.getElementById('m-admin-bal').innerText = data.system_metrics.admin_vault_balance.toLocaleString() + ' ₺';
+                
+                document.getElementById('admin-user-list').innerHTML = data.users.map(u => `
+                    <div class="list-item">
+                        <span class="user-tc">${u.tc} <span style="font-size:12px; color:var(--ios-subtext); margin-left:6px; font-weight:700;">${u.role}</span></span>
+                        <span class="user-bal">${u.balance.toLocaleString()} ₺</span>
+                    </div>
+                `).join('');
+
+                document.getElementById('admin-audit-list').innerHTML = data.logs.map(log => `
+                    <div class="log-item">
+                        <div style="display:flex; justify-content:space-between;">
+                            <span class="log-user">${log._user}</span>
+                            ${log.outcome.toUpperCase()==='SUCCESS' ? '<span class="success-badge">OK</span>' : '<span class="fail-badge">FAIL</span>'}
+                        </div>
+                        <div class="log-action">${log.action}</div>
+                        <div class="log-time">${new Date(log.time).toLocaleTimeString()}</div>
+                    </div>
+                `).join('');
+
+                // Fetch Webhook Status
+                try {
+                    const whResp = await fetch('/admin/webhook_status');
+                    const whData = await whResp.json();
+                    document.getElementById('webhook-sub-count').innerText = whData.subscribers.length;
+                    renderWebhookHistory(whData.history);
+                } catch(e) {}
+            }
+        }
+
+        function renderWebhookHistory(history) {
+            const list = document.getElementById('webhook-history-list');
+            list.innerHTML = '';
+            history.slice(0, 10).forEach(ev => {
+                const div = document.createElement('div');
+                div.className = 'log-item';
+                div.innerHTML = `
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:var(--ios-blue); font-weight:700; font-size:13px;">📡 ${ev.event}</span>
+                        <span class="${ev.status === 'SENT' ? 'success-badge' : 'fail-badge'}" style="font-size:10px;">${ev.status}</span>
+                    </div>
+                    <div style="font-family:monospace; font-size:10px; margin:4px 0; color:var(--ios-subtext); word-break:break-all; max-height:40px; overflow:hidden;">
+                        ${JSON.stringify(ev.payload)}
+                    </div>
+                    <div class="log-time">${new Date(ev.time).toLocaleTimeString()}</div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        async function subscribeWebhook() {
+            const url = document.getElementById('webhook-url').value;
+            if(!url) return;
+            const resp = await fetch('/webhook/subscribe', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url})
+            });
+            const data = await resp.json();
+            alert("Webhook Subscribed!");
+        }
+
+        async function testWebhook() {
+            await fetch('/webhook/test_fire', {method: 'POST'});
+        }
+
+        function renderUserDashboard(data) {
+            document.getElementById('u-bal').innerText = (data.balance || 0).toLocaleString() + ' ₺';
+            document.getElementById('u-iban').innerText = data.iban || "TR000000000000000000000000";
+            
+            document.getElementById('u-ledger').innerHTML = (data.ledgerHistory || []).slice(0, 20).map(l => {
+                const isPos = l.move > 0;
+                return `
+                    <div class="list-item">
+                        <div style="display:flex; flex-direction:column;">
+                            <span style="font-weight:600; font-size:15px;">${l.desc}</span>
+                            <span style="font-size:12px; color:var(--ios-subtext); margin-top:4px;">${new Date(l.time).toLocaleString()}</span>
+                        </div>
+                        <span style="font-weight:700; color:${isPos ? 'var(--ios-green)' : 'var(--ios-text)'}">${isPos ? '+' : ''}${l.move.toLocaleString()} ₺</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function sendMoney() {
+            const iban = document.getElementById('tr-iban').value;
+            const amount = document.getElementById('tr-amount').value;
+            const msgEl = document.getElementById('tr-msg');
+            const btn = document.getElementById('btn-send');
+
+            if (!iban || !amount || amount <= 0) {
+                msgEl.innerText = "Please enter valid IBAN and Amount"; msgEl.style.color = "var(--ios-red)"; msgEl.style.display = "block"; return;
+            }
+
+            btn.innerText = "Processing...";
+            btn.style.opacity = "0.5";
+
+            try {
+                const resp = await fetch("/transfer/internal", {
+                    method: "POST", headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({ sender_tc: currentUser, receiver_iban: iban, amount: amount })
+                });
+                
+                const res = await resp.json();
+                
+                if (resp.ok) {
+                    msgEl.innerText = "Transfer Success! Funds sent securely.";
+                    msgEl.style.color = "var(--ios-green)";
+                    // Refresh data
+                    const refreshResp = await fetch(`/state/load?tc=${currentUser}`);
+                    renderUserDashboard(await refreshResp.json());
+                } else {
+                    msgEl.innerText = res.detail || "Transfer Failed";
+                    msgEl.style.color = "var(--ios-red)";
+                }
+            } catch (e) {
+                msgEl.innerText = "Network Error";
+            }
+            
+            msgEl.style.display = "block";
+            btn.innerText = "Send Money";
+            btn.style.opacity = "1";
+            setTimeout(() => msgEl.style.display = 'none', 4000);
+        }
+    </script>
+</body>
+</html>

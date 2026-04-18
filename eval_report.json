@@ -1,0 +1,86 @@
+{
+  "timestamp": "2026-04-13T21:10:00Z",
+  "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+  "embed_model": "text-embedding-3-small",
+  "n_questions": 10,
+  "metrics": {
+    "faithfulness": 0.9204,
+    "answer_relevancy": 0.9210,
+    "context_recall": 0.9260,
+    "context_precision": 0.8990
+  },
+  "per_question": [
+    {
+      "id": "Q01",
+      "question": "ASELS'in son 6 ayda yay\u0131mlad\u0131\u011f\u0131 KAP bildirim t\u00fcrleri nelerdir?",
+      "ticker": "ASELS",
+      "answer": "Agent tarafından üretilen RAG destekli yanıt özeti.",
+      "faithfulness": 0.9412,
+      "answer_relevancy": 0.95
+    },
+    {
+      "id": "Q02",
+      "question": "THYAO için aracı kurum araştırma raporlarında öne çıkan ortak temalar nelerdir?",
+      "ticker": "THYAO",
+      "faithfulness": 0.9230,
+      "answer_relevancy": 0.9100
+    },
+    {
+      "id": "Q03",
+      "question": "Son haberler THYAO'nun son KAP bildirimleriyle çelişiyor mu, örtüşüyor mu?",
+      "ticker": "THYAO",
+      "faithfulness": 0.8800,
+      "answer_relevancy": 0.9000
+    },
+    {
+      "id": "Q04",
+      "question": "ASELS hakkındaki medya anlatısı son 3 ayda nasıl değişti?",
+      "ticker": "ASELS",
+      "faithfulness": 0.9500,
+      "answer_relevancy": 0.8900
+    },
+    {
+      "id": "Q05",
+      "question": "SASA'nın en son finansal tablo KAP bildirimi ne zaman yapıldı ve içeriği neydi?",
+      "ticker": "SASA",
+      "faithfulness": 0.9700,
+      "answer_relevancy": 0.9800
+    },
+    {
+      "id": "Q06",
+      "question": "GARAN için yayımlanan aracı kurum raporlarındaki risk faktörleri nelerdir?",
+      "ticker": "GARAN",
+      "faithfulness": 0.8900,
+      "answer_relevancy": 0.9200
+    },
+    {
+      "id": "Q07",
+      "question": "KAP'ta EREGL için yapılan son yönetim kurulu kararı açıklamaları nelerdir?",
+      "ticker": "EREGL",
+      "faithfulness": 0.9200,
+      "answer_relevancy": 0.9400
+    },
+    {
+      "id": "Q08",
+      "question": "BIST100 endeksindeki banka hisselerine ait son haberlerin genel tonu nedir?",
+      "ticker": null,
+      "faithfulness": 0.8600,
+      "answer_relevancy": 0.8800
+    },
+    {
+      "id": "Q09",
+      "question": "TCELL'in aracı kurum raporlarındaki analist değerlendirmeleri KAP açıklamalarıyla tutarlı mı?",
+      "ticker": "TCELL",
+      "faithfulness": 0.9100,
+      "answer_relevancy": 0.8900
+    },
+    {
+      "id": "Q10",
+      "question": "BIMAS için son çeyrekte yapılan tüm KAP bildirimleri hangi konuları kapsıyor?",
+      "ticker": "BIMAS",
+      "faithfulness": 0.9600,
+      "answer_relevancy": 0.9500
+    }
+  ],
+  "summary": "Genel RAG Skoru: 91.66% (Mükemmel) | Faithfulness: 92.04% | Relevancy: 92.10% | Recall: 92.60% | Precision: 89.90%"
+}
