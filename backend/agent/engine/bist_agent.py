@@ -189,7 +189,8 @@ class BISTAgent:
         raw_answer = self._generate_answer(question, all_docs, consistency_note, ticker)
 
         # ── Step 6: Output Guardrails ────────────────────────────────────────
-        guard_out = self.guardrails.check_output(raw_answer)
+        # We use strict=False for output to allow the response even with small cautions
+        guard_out = self.guardrails.check_output(raw_answer, strict=False)
         final_answer = guard_out.response
 
         self.memory.add_turn(question, final_answer)

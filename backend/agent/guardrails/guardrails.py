@@ -24,39 +24,17 @@ DISCLAIMER = (
 
 # ── Yasak ifadeler ─────────────────────────────────────────────────────────────
 INVESTMENT_ADVICE_PATTERNS = [
-    # ── Emir kipi (al/sat) ────────────────────────────────────────────────────
-    r"\bal[ıi]n\b",              # "alın"
-    r"\bsat[ıi]n\b",             # "satın"
-    r"\bal\s*sinyali\b",
-    r"\bsat\s*sinyali\b",
+    r"\bal[ıi]n\b",
+    r"\bsat[ıi]n\b",
     r"\bkesinlikle\s*al\b",
     r"\bkesinlikle\s*sat\b",
-
-    # ── Soru kipi (almalı mıyım / satmalı mıyım) ─────────────────────────────
-    r"\bal(malı|meli)\s*m[ıi](y[ıi]m|s[ıi]n|y[ıi]z)?\b",  # "almalı mıyım/mısın"
-    r"\bsat(malı|meli)\s*m[ıi](y[ıi]m|s[ıi]n|y[ıi]z)?\b",  # "satmalı mıyım"
-    r"\bal[aae]\s*(m[ıi][myz]|bilir\s*miy[ıi]m)\b",         # "alayım mı", "alabilir miyim"
-    r"\bneden\s*al(ay[ıi]m|malı)\b",                         # "neden alayım"
-    r"\b(buy|sell)\s*(recommendation|signal|advice)\b",
-
-    # ── Fiyat tahmini ─────────────────────────────────────────────────────────
     r"\byatırım\s*tavsiye",
-    r"\bhedef\s*fiyat[ıi]?\s*\d",
+    r"\bhedef\s*fiyat[ıi]?\s*:?\s*\d",
     r"\bfiyat\s*tahmin",
     r"\byükselecek\b",
     r"\bdüşecek\b",
-    r"\bkâr\s*elde\s*ed",
-
-    # ── İngilizce ─────────────────────────────────────────────────────────────
-    r"should\s+buy",
-    r"should\s+sell",
-    r"price\s+target\s*[\$₺]?\s*\d",
-    r"will\s+rise",
-    r"will\s+fall",
     r"strong\s+buy",
     r"strong\s+sell",
-    r"\bbuy\s+now\b",
-    r"\bsell\s+now\b",
 ]
 
 _PATTERNS = [re.compile(p, re.IGNORECASE) for p in INVESTMENT_ADVICE_PATTERNS]
@@ -122,11 +100,14 @@ class BISTGuardrails:
 
     # ── Output Check ──────────────────────────────────────────────────────────
 
-    def check_output(self, response: str) -> GuardrailResult:
+    def check_output(self, response: str, strict: Optional[bool] = None) -> GuardrailResult:
         """LLM çıktısını filterler ve disclaimer ekler."""
         violations = self._find_violations(response)
+        
+        # Use provided strictness or fallback to default
+        current_strict = strict if strict is not None else self.strict
 
-        if violations and self.strict:
+        if violations and current_strict:
             logger.warning(f"Output violation (strict block): {violations}")
             return GuardrailResult(
                 passed=False,
