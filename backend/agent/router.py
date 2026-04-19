@@ -53,6 +53,22 @@ async def query(req: QueryRequest):
 
     if ticker:
         try:
+            # Auto-ingest latest news/KAP for this ticker on-the-fly to ensure DB is populated
+            try:
+                from backend.agent.ingestion.news_scraper import NewsScraper
+                from backend.agent.ingestion.kap_scraper import KAPScraper
+                
+                # Sınırları düşük tutarak hızlıca son 15-20 haberi çekip DB'ye atalım
+                if store.collection.count() < 100 or len(store.search(ticker, query="", limit=1)) == 0:
+                    ns = NewsScraper()
+                    ks = KAPScraper()
+                    n_docs = ns.scrape(ticker, limit=10, days_back=30)
+                    k_docs = ks.scrape(ticker, limit=15)
+                    # VectorStore'a yükle
+                    store.add_documents(n_docs + k_docs)
+            except Exception as e:
+                logger.warning(f"On-the-fly ingest failed: {e}")
+
             market_data = market_fetcher.get_summary(ticker)
             if not market_data or 'returns' not in market_data:
                 market_data = {
