@@ -347,13 +347,14 @@ Maksimum 2 cümle."""
         consistency_section = f"\n\nKAYNAK TUTARLILIK NOTU:\n{consistency_note}" if consistency_note else ""
 
         mem_context = self.memory.get_context(ticker=ticker)
-        mem_section = f"\n\nBELLEK (GEÇMİŞ İLGİ VE SORULAR):\n{mem_context}" if mem_context else ""
-
-        system = f"""Sen BIST Equity Intelligence Agent'sın.{mem_section}
+        system = f"""Sen bir BIST Finansal Analiz Ajanısın.{mem_section}
+KULLANICI İSTEĞİ ÖNCELİĞİ: Kullanıcı senden hisse hakkında KAP haberlerinin ve duyuruların alt alta tek tek özetlenmesini istiyor.
 KURALLAR:
-- Yalnızca verilen kaynaklara dayan, [N] notasyonu ile kaynak göster
-- Yatırım tavsiyesi, al/sat sinyali, fiyat tahmini YASAK
-- Net, özlü, Türkçe yanıt ver"""
+1. Gelen bağlamdaki (KAP ve Haber) bilgileri tarih sırasına göre (en yeniden eskiye) alt alta listele.
+2. Her bir haber/duyuru için tarih, başlık ve kısa bir özet (1-2 cümle) ver.
+3. Gereksiz uzun yorumlardan kaçın, doğrudan net özetler ver.
+4. Yatırım tavsiyesi, al/sat sinyali YASAK.
+5. Sadece Türkçe yanıt ver."""
 
         human = f"""BAĞLAM:
 {context}{consistency_section}

@@ -85,15 +85,14 @@ async def query(req: QueryRequest):
     try:
         result = agent.run(ctx + req.question, ticker=ticker)
         
-        # Ensure result is serializable
         return QueryResponse(
-            answer=result.get("answer", "Analiz üretilemedi."),
-            sources=result.get("sources", []),
+            answer=getattr(result, "answer", "Analiz üretilemedi."),
+            sources=getattr(result, "sources_used", []),
             ticker=ticker,
             market_data=market_data,
-            decision=result.get("decision"),
-            consistency_note=result.get("consistency_note"),
-            iterations=result.get("iterations", 1)
+            decision=getattr(result, "decision", None),
+            consistency_note=getattr(result, "consistency_note", ""),
+            iterations=getattr(result, "iterations", 1)
         )
     except Exception as e:
         logger.error(f"Agent analysis crashed: {e}")
