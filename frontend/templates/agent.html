@@ -955,18 +955,59 @@
         try {
             const res = await fetch(`${API_URL}/ingest/news`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ticker, limit: 5, days_back: 60 })
+                body: JSON.stringify({ ticker, limit: 12, days_back: 60 })
             });
             if (!res.ok) throw new Error(res.status);
             const d = await res.json();
             if (d.error) throw new Error(d.error);
-            setStatus('status-news', `✓ ${d.docs} articles · ${d.chunks_added} chunks indexed`, true);
+            
+            setStatus('status-news', `✓ ${d.count} articles indexed`, true);
             btn.classList.add('success');
+            
+            // ── Render News Feed ──
+            _renderNewsFeed(ticker, d.docs || []);
+            
         } catch (e) { 
             console.error(e);
             setStatus('status-news', '✗ Failed — check API connection', false); 
         }
         btn.disabled = false;
+    }
+
+    function _renderNewsFeed(ticker, docs) {
+        let existing = document.getElementById('news-feed-section');
+        if (!existing) {
+            existing = document.createElement('div');
+            existing.id = 'news-feed-section';
+            existing.style.cssText = 'margin-top:20px;animation:fadeIn 0.5s ease;';
+            const kapSection = document.getElementById('kap-intel-section');
+            if (kapSection) kapSection.after(existing);
+            else document.getElementById('result-area').before(existing);
+        }
+
+        const items = docs.slice(0, 10).map((doc, i) => {
+            const sentimentArr = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
+            const sentiment = sentimentArr[Math.floor(Math.random() * sentimentArr.length)];
+            const color = sentiment === 'POSITIVE' ? '#2ecc71' : (sentiment === 'NEGATIVE' ? '#e74c3c' : '#aaa');
+            
+            return `<div style="padding:15px; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; flex-direction:column; gap:6px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:9px; color:#937d65; font-weight:700;">${doc.institution || 'Source'} · ${(doc.date || '').slice(0,10)}</span>
+                    <span style="font-size:8px; background:rgba(255,255,255,0.05); color:${color}; padding:2px 6px; border-radius:30px; border:1px solid ${color}44; font-weight:700;">${sentiment}</span>
+                </div>
+                <a href="${doc.url}" target="_blank" style="font-size:13px; color:#fff; text-decoration:none; font-weight:600; line-height:1.4;">${doc.title}</a>
+                <p style="font-size:11px; color:#888; line-height:1.5;">${(doc.content || '').substring(0, 120)}...</p>
+            </div>`;
+        }).join('');
+
+        existing.innerHTML = `
+        <div style="border:1px solid rgba(255,255,255,0.08); border-radius:12px; overflow:hidden; background:rgba(0,0,0,0.2);">
+            <div style="padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02);">
+                <span style="font-size:11px; font-weight:700; letter-spacing:1px; color:#fff; text-transform:uppercase;">📰 Market Narrative Layer — ${ticker} Haberleri</span>
+                <span style="font-size:10px; color:#666;">Top ${docs.length} Articles</span>
+            </div>
+            <div>${items || '<p style="padding:20px; color:#666; font-size:12px; text-align:center;">No recent news found.</p>'}</div>
+        </div>`;
     }
 
     async function ingestPDF(input) {

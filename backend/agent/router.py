@@ -200,7 +200,7 @@ async def ingest_news(req: IngestReq):
         ns = NewsScraper()
         docs = ns.fetch_news(req.ticker, limit=req.limit, days_back=req.days_back)
         store.add_documents(docs)
-        return {"status": "success", "docs": len(docs), "chunks_added": len(docs)}
+        return {"status": "success", "count": len(docs), "docs": docs}
     except Exception as e:
         logger.error(f"News Ingest failed: {e}")
         raise HTTPException(500, str(e))
