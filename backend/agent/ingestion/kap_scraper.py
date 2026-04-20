@@ -17,6 +17,20 @@ class KAPScraper:
         self.save_dir = save_dir
         os.makedirs(save_dir, exist_ok=True)
 
+    def get_company_list(self) -> list[dict]:
+        """BIST100 ve popüler hisseleri içeren genişletilmiş liste."""
+        tickers = [
+            "AEFES", "AGHOL", "AKBNK", "AKCNS", "AKSA", "AKSEN", "ALARK", "ALBRK", "ARCLK", "ASELS",
+            "ASTOR", "BERA", "BIENP", "BIMAS", "BRSAN", "BRYAT", "BUCIM", "CANTE", "CCOLA", "CWENE",
+            "DOAS", "DOHOL", "EGEEN", "EKGYO", "ENJSA", "ENKAI", "EREGL", "EUPWR", "FROTO", "GARAN",
+            "GESAN", "GUBRF", "GWIND", "HALKB", "HEKTS", "IPEKE", "ISCTR", "ISGYO", "IZMDC", "KARDM",
+            "KCHOL", "KONTR", "KORDS", "KOZAA", "KOZAL", "KRDMD", "MAVI", "MGROS", "MIATK", "ODAS",
+            "OTKAR", "OYAKC", "PETKM", "PGSUS", "QUAGR", "SAHOL", "SASA", "SISE", "SMRTG", "SOKM",
+            "TAVHL", "TCELL", "THYAO", "TKFEN", "TOASO", "TSKB", "TTKOM", "TUPRS", "VAKBN", "VESBE",
+            "VESTL", "YEOTK", "YKBNK", "ZOREN"
+        ]
+        return [{"memberCode": t, "memberId": str(i)} for i, t in enumerate(sorted(tickers), start=1)]
+
     def scrape(self, ticker: str, limit: int = 15) -> list[dict]:
         """Alias for fetch_disclosures to match router interface."""
         return self.fetch_disclosures(ticker, limit)
@@ -142,10 +156,12 @@ class KAPScraper:
             json.dump(docs, f, ensure_ascii=False, indent=2)
 
 if __name__ == "__main__":
+    import sys
     logging.basicConfig(level=logging.INFO)
+    ticker = sys.argv[1] if len(sys.argv) > 1 else "ASELS"
     ks = KAPScraper()
-    print(f"Testing ASELS...")
-    results = ks.scrape("ASELS", limit=5)
+    print(f"Testing {ticker}...")
+    results = ks.scrape(ticker, limit=5)
     print(f"Found {len(results)} results.")
     for r in results:
         print(f"- {r['date']} | {r['title']}")
