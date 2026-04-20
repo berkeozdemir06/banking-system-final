@@ -424,6 +424,7 @@ def generate_pdf_report(analysis: dict) -> bytes:
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.lib.fonts import addMapping
     import os
 
     # ── Font Kayıt (Playfair Display + Outfit) ────────────────────────────────
@@ -444,6 +445,15 @@ def generate_pdf_report(analysis: dict) -> bytes:
     pfb_ok = _reg("PlayfairBold", os.path.join(_BASE, "PlayfairDisplay-Bold.ttf"))
     # Outfit – body, tablolar, meta
     ot_ok  = _reg("Outfit",       os.path.join(_BASE, "Outfit.ttf"))
+    otb_ok = _reg("OutfitBold",   os.path.join(_BASE, "Outfit-Bold.ttf"))
+
+    if pf_ok and pfb_ok:
+        addMapping("Playfair", 0, 0, "Playfair")
+        addMapping("Playfair", 1, 0, "PlayfairBold")
+
+    if ot_ok and otb_ok:
+        addMapping("Outfit", 0, 0, "Outfit")
+        addMapping("Outfit", 1, 0, "OutfitBold")
 
     # Fallback: sisteme bak
     if not pf_ok:
@@ -452,12 +462,14 @@ def generate_pdf_report(analysis: dict) -> bytes:
         _reg("PlayfairBold", "/System/Library/Fonts/Supplemental/Arial Bold.ttf")
     if not ot_ok:
         _reg("Outfit",       "/System/Library/Fonts/Supplemental/Arial Unicode.ttf")
+    if not otb_ok:
+        _reg("OutfitBold",   "/System/Library/Fonts/Supplemental/Arial Bold.ttf")
 
     # Aktif font adları
     F_SERIF      = "Playfair"     if pf_ok  else "Times-Roman"
     F_SERIF_BOLD = "PlayfairBold" if pfb_ok else "Times-Bold"
     F_SANS       = "Outfit"       if ot_ok  else "Helvetica"
-    F_SANS_BOLD  = "Outfit"       if ot_ok  else "Helvetica-Bold"  # Outfit variable; bold via size
+    F_SANS_BOLD  = "OutfitBold"   if otb_ok else "Helvetica-Bold"
 
     # ── Renk Paleti (ekrandaki beyaz premium tasarım) ─────────────────────────
     BLACK      = colors.HexColor("#000000")
@@ -523,9 +535,9 @@ def generate_pdf_report(analysis: dict) -> bytes:
         fontName=F_SANS, fontSize=8.5,
         textColor=MUTED, leading=13)
 
-    # Duyuru başlığı
+    # Duyuru başlığı (Türkçe karakterlerin hatasız çıkması için Outfit Bold kullanıyoruz)
     s_ann_title = P("AnnTitle",
-        fontName=F_SERIF_BOLD, fontSize=10,
+        fontName=F_SANS_BOLD, fontSize=10,
         textColor=DARK, leading=14, spaceAfter=2)
 
     # Duyuru meta (tarih, kaynak)
@@ -670,7 +682,7 @@ def generate_pdf_report(analysis: dict) -> bytes:
         if v is None: return "N/A"
         sign = "+" if v >= 0 else ""
         col = "#1a7a3c" if v >= 0 else "#b91c1c"
-        return f'<font color="{col}"><b>{sign}{v:.2f}%</b></font>'
+        return Paragraph(f'<font color="{col}"><b>{sign}{v:.2f}%</b></font>', P("Pct", fontName=F_SANS, fontSize=9, leading=10))
 
     perf_rows = [
         ["Last Close",          fmt_price(lc),                ""],
