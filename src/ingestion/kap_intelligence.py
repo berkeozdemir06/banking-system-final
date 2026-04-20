@@ -172,83 +172,152 @@ def _parse_rss_date(raw: str) -> Optional[datetime]:
     return None
 
 
+# ─────────────────────────────────────────────────────────────
+#  2. KAP Bildirimleri (Playwright Direct Scraping)
+# ─────────────────────────────────────────────────────────────
+
 def fetch_kap_announcements(ticker: str, limit: int = 15) -> list[dict]:
     """
-    Google News RSS üzerinden KAP bildirimlerini çeker.
-    Her bildirim için:
-      - title, date, url, content
-    Sonuçlar tarihe göre azalan sırada döner.
+    KAP üzerinden doğrudan bildirimleri çeker (Playwright kullanarak).
+    Adımlar:
+      1. kap.org.tr'ye gir
+      2. Arama kutusuna ticker yaz
+      3. Dropdown'dan şirketi seç
+      4. Bildirimler sekmesine git
+      5. Son 1 ay filtresini uygula
+      6. Verileri çek
     """
-    session = requests.Session()
-    session.headers.update(HEADERS)
-
-    queries = [
-        f'"{ticker.upper()}" KAP bildirimi site:kap.org.tr',
-        f'"{ticker.upper()}" KAP özel durum',
-        f'"{ticker.upper()}" KAP borsa bildirimi',
-        f'{ticker.upper()} KAP',
-    ]
-
-    seen_titles: set = set()
+    from playwright.sync_api import sync_playwright
+    
     docs: list[dict] = []
+    
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            # Use a slightly longer timeout and less strict wait condition
+            context = browser.new_context(user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+            page = context.new_page()
+            page.set_default_timeout(45000)
+            
+            logger.info(f"Navigating to KAP for {ticker}...")
+            page.goto('https://www.kap.org.tr/tr/', wait_until='domcontentloaded')
+            
+            # Step 1: Type ticker
+            # Using the #all-search ID found in previous analysis
+            page.fill('#all-search', ticker)
+            page.wait_for_timeout(2000)
+            
+            # Step 2: Select company from dropdown/results
+            # We try to click the first reasonable result matching the ticker
+            try:
+                # The dropdown results are in #searchDiv
+                company_selector = f'#searchDiv a:has-text("{ticker}")'
+                if page.locator(company_selector).count() > 0:
+                    page.click(company_selector)
+                else:
+                    page.keyboard.press('Enter')
+            except:
+                page.keyboard.press('Enter')
+            
+            page.wait_for_timeout(4000)
+            
+            # Step 3: Navigate to 'Bildirimler' tab
+            try:
+                # Look for the tab. It might be an <a> or <div>
+                page.click('a:has-text("Bildirimler")', timeout=10000)
+                page.wait_for_timeout(2000)
+            except:
+                logger.warning("Bildirimler tab not found via text match.")
 
-    for query in queries:
-        if len(docs) >= limit * 2:
-            break
-        try:
-            encoded = urllib.parse.quote(query)
-            url = f"https://news.google.com/rss/search?q={encoded}&hl=tr&gl=TR&ceid=TR:tr"
-            resp = session.get(url, timeout=12)
-            resp.raise_for_status()
-            root = ET.fromstring(resp.content)
-            items = root.findall("./channel/item")
+            # Step 4: Filter 'Son 1 ay' and search
+            try:
+                page.click('text="Son 1 ay"', timeout=10000)
+                page.wait_for_timeout(1000)
+                page.click('button:has-text("Ara")')
+                page.wait_for_timeout(3000)
+            except:
+                logger.warning("Filtering for 'Son 1 ay' failed.")
 
-            for item in items:
-                try:
-                    title_el = item.find("title")
-                    link_el  = item.find("link")
-                    pub_el   = item.find("pubDate")
-                    desc_el  = item.find("description")
-
-                    title   = title_el.text.strip() if title_el is not None and title_el.text else ""
-                    link    = link_el.text.strip()  if link_el  is not None and link_el.text  else ""
-                    pub_raw = pub_el.text.strip()   if pub_el   is not None and pub_el.text   else ""
-                    desc_raw = desc_el.text         if desc_el  is not None and desc_el.text  else ""
-
-                    if not title or title in seen_titles:
-                        continue
-                    seen_titles.add(title)
-
-                    desc_clean = re.sub(r"<[^>]+>", " ", desc_raw).strip()
-                    content = f"{title}. {desc_clean}" if desc_clean else title
-                    dt_obj  = _parse_rss_date(pub_raw)
-
+            # Step 5: Scrape Table
+            rows = page.locator('table tbody tr').all()
+            for row in rows:
+                if len(docs) >= limit:
+                    break
+                cells = row.locator('td').all_text_contents()
+                if len(cells) >= 6:
+                    # Tarih, Kod, Şirket, Tip, Konu, Özet Bilgi
+                    dt_str = cells[1].strip()
+                    # Parse date (Bugün HH:mm or DD.MM.YYYY HH:mm)
+                    dt_obj = _parse_kap_date(dt_str)
+                    
+                    link_el = row.locator('a').first
+                    url = "https://www.kap.org.tr" + link_el.get_attribute('href') if link_el.count() > 0 else ""
+                    
                     docs.append({
                         "ticker":   ticker.upper(),
-                        "title":    title,
-                        "content":  content[:3000],
-                        "url":      link,
-                        "date_str": dt_obj.strftime("%Y-%m-%d") if dt_obj else "Bilinmiyor",
+                        "title":    cells[5].strip(), # Konu
+                        "content":  cells[6].strip() if len(cells) > 6 else "", # Özet Bilgi
+                        "url":      url,
+                        "date_str": dt_obj.strftime("%Y-%m-%d") if dt_obj else dt_str,
                         "date_obj": dt_obj,
-                        "source":   "Google News RSS / KAP",
+                        "source":   "KAP Direct",
+                        "type":     cells[4].strip() # Tip (ÖDA, DG vb.)
                     })
-                except Exception:
-                    continue
-            time.sleep(0.4)
-        except Exception as e:
-            logger.warning(f"RSS fetch failed for query '{query}': {e}")
+            
+            browser.close()
+    except Exception as e:
+        logger.error(f"fetch_kap_announcements({ticker}) failed: {e}")
+        # In case of failure, we might want to fallback to RSS or return empty
+        return []
 
-    # DDG fallback
-    if len(docs) < 3:
-        docs.extend(_ddg_fallback(ticker, limit, seen_titles))
+    return docs
 
-    # Tarihe göre sırala (en yeni önce)
-    docs_with_date = [d for d in docs if d.get("date_obj")]
-    docs_no_date   = [d for d in docs if not d.get("date_obj")]
-    docs_with_date.sort(key=lambda x: x["date_obj"], reverse=True)
-    docs = docs_with_date + docs_no_date
+def _parse_kap_date(raw: str) -> Optional[datetime]:
+    """KAP tarih formatını (örn: 'Bugün 14:15' veya '15.04.2024 10:00') datetime'a çevirir."""
+    now = datetime.now()
+    if "Bugün" in raw:
+        try:
+            t_str = raw.replace("Bugün", "").strip()
+            return datetime.combine(now.date(), datetime.strptime(t_str, "%H:%M").time())
+        except: return now
+    if "Dün" in raw:
+        try:
+            t_str = raw.replace("Dün", "").strip()
+            return datetime.combine(now.date() - timedelta(days=1), datetime.strptime(t_str, "%H:%M").time())
+        except: return now - timedelta(days=1)
+    
+    for fmt in ["%d.%m.%Y %H:%M", "%d.%m.%Y"]:
+        try:
+            return datetime.strptime(raw.strip()[:16], fmt)
+        except: continue
+    return None
 
-    return docs[:limit]
+
+# ─────────────────────────────────────────────────────────────
+#  6. AI Commentary (ÖZAS Agent Yorumu)
+# ─────────────────────────────────────────────────────────────
+
+def generate_agent_commentary(announcement: dict, price_impact: Optional[float] = None) -> str:
+    """
+    KAP bildirimine binaen 'ÖZAS Agent' yorumu üretir.
+    Gerçek uygulamada bir LLM (Gemini/OpenAI) çağrısı yapılır.
+    """
+    title = announcement.get('title', '')
+    content = announcement.get('content', '')
+    impact = f"Bu bildirim sonrası hisse fiyatı %{price_impact:+.2f} değişim gösterdi." if price_impact is not None else "Fiyat verisi henüz işlenmedi."
+    
+    # Simple logic-based commentary generation if no LLM
+    comment = ""
+    if "Kar Payı" in title or "Temettü" in title:
+        comment = "Şirketin nakit temettü dağıtım kararı hissedar bağlılığı açısından pozitif bir sinyaldir. Dağıtım oranı sektör ortalamalarıyla kıyaslanmalıdır."
+    elif "İhale" in title or "Yeni İş İlişkisi" in title:
+        comment = "Yeni alınan iş/ihale, şirketin iş hacmini ve gelecekteki nakit akışlarını doğrudan olumlu etkileyecektir. Operasyonel karlılık üzerindeki marj etkisi takip edilmelidir."
+    elif "Kredi" in title or "Borçlanma" in title:
+        comment = "Borçlanma araçları ihracı veya kredi kullanımı, şirketin finansman yapısını ve likidite yönetimini etkiler. Borç/Özsermaye rasyosu kritik öneme sahiptir."
+    else:
+        comment = f"Bu bildirim, şirketin genel operasyonel akışını ve şeffaflık ilkelerini yansıtmaktadır. Yatırımcıların bildirim içeriğindeki detaylara (eklere) odaklanması önerilir."
+
+    return f"{comment} {impact}"
 
 
 def _ddg_fallback(ticker: str, limit: int, seen_titles: set) -> list[dict]:
@@ -859,13 +928,19 @@ def generate_pdf_report(analysis: dict) -> bytes:
         else:
             impact_line = "Price impact data unavailable for this date."
 
+        # Get AI Commentary
+        ai_comment = generate_agent_commentary(ann, chg)
+
         blk = KeepTogether([
             Paragraph(f"<b>{i}. {title}</b>", s_ann_title),
             Paragraph(f"{date_s}  ·  {ann.get('source','?')}", s_ann_meta),
             Spacer(1, 3),
-            Paragraph(content[:350] + ("…" if len(content) > 350 else ""), s_small),
-            Spacer(1, 3),
-            Paragraph(f"<b>Price Impact:</b> {impact_line}", s_impact),
+            Paragraph(f"<b>Bildirim Metni:</b> {content[:500]}...", s_small),
+            Spacer(1, 6),
+            Paragraph(f"<b>ÖZAS Agent Yorumu:</b>", s_ann_title), # Using same style for sub-header
+            Paragraph(ai_comment, s_body),
+            Spacer(1, 6),
+            Paragraph(f"<b>Fiyat Etkisi:</b> {impact_line}", s_impact),
             Spacer(1, 6),
             divider(thick=0.25, color=LIGHT_LINE, before=0, after=4),
         ])
@@ -880,7 +955,7 @@ def generate_pdf_report(analysis: dict) -> bytes:
         "REGULATORY DISCLAIMER: This report is generated by the ÖZAS Finance Agent for "
         "academic simulation purposes only. The information does not constitute investment "
         "advice, financial guidance, or any buy/sell recommendation. All data sourced from "
-        "Yahoo Finance and Google News RSS. Consult a licensed financial advisor before "
+        "Yahoo Finance and KAP Direct (Public Disclosure Platform). Consult a licensed financial advisor before "
         "making any investment decisions.",
         s_disclaimer
     ))

@@ -474,7 +474,7 @@ st.markdown("""
 <div class="hero">
   <div class="hero-badge">🇹🇷 &nbsp; FinTech 2025-2026 · Agentic RAG</div>
   <div class="hero-title">BIST Equity Intelligence Agent</div>
-  <p class="hero-sub">KAP bildirimleri · Finansal haberler · Aracı kurum raporları → Kaynaklı & zaman farkındalıklı analiz</p>
+  <p class="hero-sub">KAP bildirimleri · Finansal haberler · Aracı kurum raporları → Kaynaklı &amp; zaman farkındalıklı analiz</p>
   <div class="hero-stats">
     <div class="stat-pill"><span class="val">3</span><span class="lbl">Veri Kaynağı</span></div>
     <div class="stat-pill"><span class="val">8</span><span class="lbl">Stack Katmanı</span></div>
@@ -483,6 +483,168 @@ st.markdown("""
   </div>
 </div>
 """, unsafe_allow_html=True)
+
+# ── Intelligence Dashboard ────────────────────────────────────────────────────
+st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+st.markdown('<div class="sidebar-title">🧠 KAP Intelligence Dashboard — Otomatik Analiz</div>', unsafe_allow_html=True)
+
+intel_col1, intel_col2, intel_col3 = st.columns([2, 1, 1])
+with intel_col1:
+    intel_ticker = st.text_input(
+        "", value="ASELS",
+        placeholder="Hisse kodu girin (ASELS, THYAO, GARAN...)",
+        label_visibility="collapsed",
+        key="intel_ticker"
+    ).upper()
+with intel_col2:
+    analyze_btn = st.button("📊 Analiz Et", type="primary", use_container_width=True, key="analyze_btn")
+with intel_col3:
+    report_btn = st.button("📥 PDF İndir", use_container_width=True, key="report_btn")
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+if analyze_btn and intel_ticker:
+    with st.spinner(f"📡 {intel_ticker} için KAP bildirimleri ve piyasa verisi çekiliyor..."):
+        try:
+            t0  = time.time()
+            res = requests.post(
+                f"{API_URL}/intelligence/analyze",
+                json={"ticker": intel_ticker, "kap_limit": 15},
+                timeout=120
+            )
+            elapsed = time.time() - t0
+
+            if res.status_code == 200:
+                idata   = res.json()
+                company = idata.get("company", {})
+                anns    = idata.get("announcements", [])
+
+                st.success(f"✅ {intel_ticker} analizi tamamlandı — {len(anns)} KAP duyurusu, {elapsed:.1f}s")
+
+                # ── Şirket Kartı
+                st.markdown(f"""
+                <div class="glass-card" style="margin-top:12px;">
+                  <div class="sidebar-title">🏢 {company.get('company_name', intel_ticker)}</div>
+                  <div style="font-size:0.8rem;color:#64748b;margin-bottom:16px;">
+                    {company.get('sector','–')} · {company.get('industry','–')} · Piyasa Değeri: {company.get('market_cap') and str(round(company['market_cap']/1e9,1))+'B TL' or '–'}
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Metrik sütunları
+                lc   = company.get("last_close")
+                dc   = company.get("day_change_pct")
+                r1w  = company.get("ret_1w")
+                r1m  = company.get("ret_1mo")
+                r1y  = company.get("ret_1y")
+                vs   = company.get("vs_bist_1y")
+
+                m1, m2, m3, m4, m5 = st.columns(5)
+                m1.metric("Son Kapanış",     f"{lc:.2f} TL" if lc else "N/A",     f"%{dc:+.2f}" if dc is not None else None)
+                m2.metric("1 Hafta",         f"%{r1w:+.2f}" if r1w is not None else "N/A")
+                m3.metric("1 Ay",            f"%{r1m:+.2f}" if r1m is not None else "N/A")
+                m4.metric("1 Yıl",           f"%{r1y:+.2f}" if r1y is not None else "N/A")
+                m5.metric("vs BIST100 (1Y)", f"%{vs:+.2f}" if vs is not None else "N/A")
+
+                # İstikrar
+                stab = company.get("stability_score", 50)
+                vol  = company.get("volatility_1y", 0)
+                stab_color = "#22c55e" if stab >= 70 else ("#f59e0b" if stab >= 40 else "#ef4444")
+
+                st.markdown(f"""
+                <div class="glass-card" style="margin-top:8px;">
+                  <div class="sidebar-title">🤖 Ajan İstikrar Değerlendirmesi</div>
+                  <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+                    <div style="text-align:center;">
+                      <div style="font-size:2rem;font-weight:900;color:{stab_color};font-family:'JetBrains Mono',monospace;">{stab}</div>
+                      <div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:.07em;">İstikrar Skoru / 100</div>
+                    </div>
+                    <div style="font-size:0.85rem;color:#cbd5e1;line-height:1.7;flex:1;">
+                      Yıllık Volatilite: <strong style="color:#f5c842;">%{vol:.1f}</strong> &nbsp;|&nbsp;
+                      52H En Yüksek: <strong style="color:#22c55e;">{company.get('high_52w','?')} TL</strong> &nbsp;|&nbsp;
+                      52H En Düşük: <strong style="color:#ef4444;">{company.get('low_52w','?')} TL</strong><br/>
+                      BIST100 1Y: <strong style="color:#3b82f6;">%{company.get('bist_ret_1y','?')}</strong> &nbsp;|&nbsp;
+                      {intel_ticker} 1Y: <strong style="color:{('#22c55e' if (r1y or 0)>=0 else '#ef4444')};">%{f'{r1y:+.2f}' if r1y is not None else '?'}</strong>
+                    </div>
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # KAP Tablosu
+                if anns:
+                    st.markdown(f'<div class="glass-card" style="margin-top:8px;"><div class="sidebar-title">📢 Son {len(anns)} KAP Duyurusu — Ertesi Gün Fiyat Etkisi</div>', unsafe_allow_html=True)
+
+                    import pandas as pd
+                    rows = []
+                    for ann in anns:
+                        chg_pct  = ann.get("price_change_pct")
+                        bist_pct = ann.get("bist_change_pct")
+                        p0 = ann.get("price_day0")
+                        p1 = ann.get("price_day1")
+                        rows.append({
+                            "Tarih":      ann.get("date_str","?")[:10],
+                            "Başlık":     ann.get("title","?")[:60] + ("…" if len(ann.get("title",""))>60 else ""),
+                            "Duy.Günü":   f"{p0:.2f} TL" if p0 else "–",
+                            "Ertesi Gün": f"{p1:.2f} TL" if p1 else "–",
+                            "Değişim":    f"%{chg_pct:+.2f}" if chg_pct is not None else "–",
+                            "BIST100":    f"%{bist_pct:+.2f}" if bist_pct is not None else "–",
+                        })
+                    df = pd.DataFrame(rows)
+
+                    def color_val(val):
+                        if val == "–": return "color:#475569"
+                        try:
+                            v = float(val.replace("%","").replace("+",""))
+                            return f"color:{'#22c55e' if v>=0 else '#ef4444'}"
+                        except: return "color:#475569"
+
+                    styled = df.style.applymap(color_val, subset=["Değişim","BIST100"])
+                    st.dataframe(styled, use_container_width=True, height=430)
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                # PDF indirme linki
+                pdf_url = f"{API_URL}/intelligence/report?ticker={intel_ticker}&kap_limit=15"
+                st.markdown(f"""
+                <div style="margin-top:16px;">
+                  <a href="{pdf_url}" target="_blank" style="
+                    display:inline-flex;align-items:center;gap:8px;
+                    background:linear-gradient(135deg,#f5c842,#f97316);
+                    color:#0a0f1e;font-weight:700;font-size:0.9rem;
+                    padding:12px 28px;border-radius:10px;text-decoration:none;
+                    box-shadow:0 4px 16px rgba(245,200,66,0.3);
+                  ">📥 {intel_ticker} Tam PDF Raporunu İndir</a>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.error(f"Analiz hatası ({res.status_code}): {res.text[:300]}")
+        except Exception as e:
+            st.error(f"Bağlantı hatası: {e}")
+elif analyze_btn:
+    st.warning("Lütfen bir hisse kodu girin.")
+
+# PDF direkt indir butonu
+if report_btn and intel_ticker:
+    with st.spinner(f"📄 {intel_ticker} PDF raporu hazırlanıyor..."):
+        try:
+            res = requests.get(
+                f"{API_URL}/intelligence/report",
+                params={"ticker": intel_ticker, "kap_limit": 15},
+                timeout=120
+            )
+            if res.status_code == 200:
+                st.download_button(
+                    label=f"⬇️ {intel_ticker}_OZAS_Report.pdf indir",
+                    data=res.content,
+                    file_name=f"{intel_ticker}_OZAS_Report.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+            else:
+                st.error(f"PDF hatası ({res.status_code}): {res.text[:200]}")
+        except Exception as e:
+            st.error(f"PDF hatası: {e}")
+
+st.markdown("---")
 
 # Query section
 st.markdown('<div class="glass-card">', unsafe_allow_html=True)

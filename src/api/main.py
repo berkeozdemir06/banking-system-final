@@ -2,12 +2,14 @@
 BIST RAG — FastAPI uygulaması (Agentic RAG).
 
 Endpoint'ler:
-  POST /query          — soru sor, Agentic RAG yanıtı al
-  POST /ingest/kap     — KAP bildirimlerini ingest et
-  POST /ingest/news    — Haber ingest et
-  POST /ingest/pdf     — PDF rapor ingest et
-  GET  /stats          — veritabanı istatistikleri
-  GET  /health         — sistem durumu
+  POST /query                  — soru sor, Agentic RAG yanıtı al
+  POST /ingest/kap             — KAP bildirimlerini ingest et
+  POST /ingest/news            — Haber ingest et
+  POST /ingest/pdf             — PDF rapor ingest et
+  GET  /stats                  — veritabanı istatistikleri
+  GET  /health                 — sistem durumu
+  POST /intelligence/analyze   — KAP + fiyat analizi (JSON)
+  GET  /intelligence/report    — KAP + fiyat analizi PDF raporu
 """
 
 import os
@@ -19,12 +21,15 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from fastapi.responses import StreamingResponse
+
 from src.vectordb.chroma_store import BISTVectorStore
 from src.embeddings.embedder import embed_documents
 from src.ingestion.kap_scraper import KAPScraper
 from src.ingestion.news_scraper import NewsScraper
 from src.ingestion.pdf_parser import PDFParser
 from src.agent.bist_agent import BISTAgent
+from src.ingestion.kap_intelligence import full_analysis, generate_pdf_report
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -211,3 +216,52 @@ async def ingest_pdf(
         "pages":       doc.get("pages", 0),
         "chunks_added": added,
     }
+
+
+# ─────────────────────────────────────────────────────────────
+#  KAP Intelligence Endpoints
+# ─────────────────────────────────────────────────────────────
+
+class IntelligenceRequest(BaseModel):
+    ticker:    str = Field(..., description="BIST hisse kodu (örn. 'ASELS')")
+    kap_limit: int = Field(15, ge=1, le=30)
+
+
+@app.post("/intelligence/analyze")
+async def intelligence_analyze(req: IntelligenceRequest):
+    """
+    Belirtilen hisse için:
+    - Yahoo Finance'ten şirket bilgisi + fiyat getirileri
+    - Google News RSS'ten son KAP duyuruları
+    - Her duyuru için ertesi gün fiyat etkisi
+    JSON olarak döner.
+    """
+    try:
+        result = full_analysis(req.ticker, kap_limit=req.kap_limit)
+        # date_obj serialize edilemez, sil
+        for ann in result.get("announcements", []):
+            ann.pop("date_obj", None)
+        return result
+    except Exception as e:
+        logger.error(f"intelligence_analyze failed: {e}")
+        raise HTTPException(500, f"Analiz hatası: {str(e)}")
+
+
+@app.get("/intelligence/report")
+async def intelligence_report(ticker: str = "ASELS", kap_limit: int = 15):
+    """
+    Belirtilen hisse için tam analiz yapıp PDF rapor olarak döner.
+    Tarayıcıda doğrudan indirilir.
+    """
+    try:
+        result = full_analysis(ticker.upper(), kap_limit=kap_limit)
+        pdf_bytes = generate_pdf_report(result)
+        filename = f"{ticker.upper()}_OZAS_Report_{result['generated_at'][:10]}.pdf"
+        return StreamingResponse(
+            iter([pdf_bytes]),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except Exception as e:
+        logger.error(f"intelligence_report failed: {e}")
+        raise HTTPException(500, f"Rapor hatası: {str(e)}")

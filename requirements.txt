@@ -46,3 +46,6 @@ pandas
 tqdm
 streamlit
 python-multipart
+yfinance
+reportlab
+playwright

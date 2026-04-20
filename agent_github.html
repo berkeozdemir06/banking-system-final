@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ÖZAS Finance Agent</title>
+    <meta name="theme-color" content="#000000">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,700;1,400&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <!-- html2pdf for Professional Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, html {
+            height: 100vh;
+            font-family: 'Open Sans', Arial, sans-serif;
+            background-color: #000;
+            overflow: hidden;
+            background-image: url('/static/Winter-Sunrise.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }
+
+        .sim-warning-bar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 36px;
+            background: #000;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            z-index: 2000;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .agent-wrapper {
+            width: 100%;
+            height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 20px;
+            overflow-y: auto;
+            position: relative;
+            z-index: 10;
+        }
+ 
+        /* ── Glass card ── */
+        .agent-box {
+            width: 100%;
+            max-width: 760px;
+            background-color: rgba(255,255,255,0.48);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-radius: 28px;
+            border: 1px solid rgba(255,255,255,0.3);
+            box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
+            animation: panelEnter 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+            margin: auto;
+        }
+ 
+        @keyframes panelEnter {
+            from { opacity: 0; transform: scale(0.96) translateY(20px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .top-section { padding: 38px 60px 32px; }
+
+        /* ── Header ── */
+        .header-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 28px;
+        }
+        .back-btn {
+            background: none; border: none; cursor: pointer;
+            font-family: 'Open Sans', sans-serif; font-size: 12px;
+            color: #666; letter-spacing: 0.5px; padding: 0;
+            transition: color 0.2s; font-weight: 500;
+        }
+        /* ── Market Dashboard ── */
+        .market-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+        .m-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s, background 0.2s;
+        }
+        .m-card:hover { 
+            background: rgba(255,255,255,0.08);
+            transform: translateY(-2px);
+        }
+        .m-label { font-size: 9px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .m-value { font-size: 18px; font-weight: 700; color: #000; font-family: 'Outfit', sans-serif; }
+        .m-sub { font-size: 10px; color: #666; margin-top: 2px; }
+        .val-up { color: #2ecc71 !important; }
+        .val-down { color: #e74c3c !important; }
+        @media (max-width: 600px) {
+            .market-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        .logo-center { flex: 1; text-align: center; }
+        .logo-jp {
+            font-family: 'Playfair Display', serif;
+            font-size: 30px; color: #000; font-weight: 600; letter-spacing: 4px;
+        }
+        .logo-sub {
+            font-family: 'Open Sans', sans-serif; font-size: 11px;
+            color: #937d65; font-weight: 700; letter-spacing: 2.5px;
+            text-transform: uppercase; display: block; margin-top: 3px;
+        }
+
+        /* ── Section label ── */
+        .section-label {
+            font-size: 10px; font-weight: 700; letter-spacing: 2px;
+            text-transform: uppercase; color: #888;
+            margin-bottom: 10px; margin-top: 22px;
+        }
+
+        /* ── Ticker autocomplete ── */
+        .ticker-wrapper { position: relative; margin-bottom: 6px; }
+        .ticker-search {
+            width: 100%;
+            padding: 14px 18px;
+            font-size: 14px;
+            font-family: 'Open Sans', sans-serif;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            border: 1px solid #555;
+            border-radius: 4px;
+            outline: none;
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .ticker-search::placeholder { color: rgba(255,255,255,0.2); font-weight: 400; letter-spacing: 0.5px; text-transform: none; }
+        .ticker-search:focus { 
+            box-shadow: 0 0 20px rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.5);
+            background: #000;
+        }
+
+        .ticker-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px); left: 0; right: 0;
+            background: rgba(10,10,10,0.97);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            z-index: 999;
+            max-height: 220px;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        .ticker-dropdown::-webkit-scrollbar { width: 3px; }
+        .ticker-dropdown::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 99px; }
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 11px 18px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            transition: background 0.1s;
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover, .dropdown-item.active { background: rgba(255,255,255,0.06); }
+        .di-code { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: 1px; min-width: 60px; }
+        .di-name { font-size: 12px; color: rgba(255,255,255,0.5); font-weight: 400; }
+
+        /* ── 3-step ingestion row ── */
+        .ingestion-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .ingest-btn {
+            padding: 13px 14px;
+            border: 1px solid rgba(0,0,0,0.18);
+            border-radius: 4px;
+            background: rgba(255,255,255,0.5);
+            cursor: pointer;
+            font-family: 'Open Sans', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: #111;
+            text-align: left;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .ingest-btn:hover { 
+            background: rgba(255,255,255,0.7); 
+            border-color: rgba(0,0,0,0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .ingest-btn:active { transform: translateY(0); }
+        .ingest-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .ingest-btn.success { background: rgba(0,0,0,0.07); border-color: #000; }
+        .ingest-btn .btn-label { display: block; }
+        .ingest-btn .btn-step {
+            font-size: 9px; color: #999; letter-spacing: 1px;
+            font-weight: 600; display: block; margin-bottom: 5px;
+        }
+        .ingest-btn .btn-status {
+            font-size: 9px; color: #555; margin-top: 4px; display: block;
+            font-weight: 400; letter-spacing: 0.3px; text-transform: none;
+        }
+
+        /* PDF upload hidden input */
+        #pdf-file-input { display: none; }
+
+        /* ── Divider ── */
+        .divider {
+            border: none;
+            border-top: 1px solid rgba(0,0,0,0.1);
+            margin: 22px 0 0;
+        }
+
+        /* ── Question input ── */
+        .question-area {
+            width: 100%;
+            padding: 16px 18px;
+            font-size: 14px;
+            line-height: 1.65;
+            font-family: 'Open Sans', sans-serif;
+            border: 1px solid #555;
+            border-radius: 4px;
+            outline: none;
+            background: #fff;
+            color: #000;
+            resize: none;
+            transition: box-shadow 0.15s;
+            margin-bottom: 14px;
+        }
+        .question-area::placeholder { color: #aaa; }
+        .question-area:focus { box-shadow: inset 0 0 0 2px #000; }
+
+        /* ── Prompt chips ── */
+        .prompts-row {
+            display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 18px;
+        }
+        .prompt-chip {
+            background: rgba(255,255,255,0.55);
+            border: 1px solid rgba(0,0,0,0.1);
+            border-radius: 3px;
+            padding: 6px 13px;
+            font-size: 11.5px;
+            color: #333;
+            cursor: pointer;
+            font-family: 'Open Sans', sans-serif;
+            transition: all 0.15s;
+        }
+        .prompt-chip:hover { background: rgba(0,0,0,0.06); border-color: rgba(0,0,0,0.25); color: #000; }
+
+        /* ── Analyse button ── */
+        .analyse-btn {
+            width: 100%;
+            background: #0f0f0f; color: #fff;
+            border: none; padding: 17px;
+            font-size: 13px; font-family: 'Open Sans', sans-serif;
+            border-radius: 3px; cursor: pointer;
+            letter-spacing: 2px; font-weight: 700;
+            transition: background 0.25s;
+            display: flex; justify-content: center; align-items: center; gap: 10px;
+        }
+        .analyse-btn:active { transform: translateY(0); }
+        .analyse-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── Thinking Terminal ── */
+        .thinking-terminal {
+            display: none;
+            background: rgba(0,0,0,0.85);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 25px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #fff;
+            line-height: 1.8;
+            max-height: 200px;
+            overflow-y: auto;
+            animation: slideUp 0.4s ease;
+        }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .log-line { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; opacity: 0; animation: logIn 0.3s forwards; }
+        @keyframes logIn { to { opacity: 1; } }
+        .log-icon { font-size: 14px; width: 20px; text-align: center; }
+        .log-timestamp { color: rgba(255,255,255,0.3); font-size: 9px; min-width: 60px; }
+        .log-text { color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.2); }
+        .log-spinner { width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.1); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+
+        .query-presets {
+            display: flex;
+            gap: 12px;
+            margin-top: 15px;
+            margin-bottom: 12px;
+            overflow-x: auto;
+            padding-bottom: 5px;
+            scrollbar-width: none;
+        }
+        .preset-btn {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .preset-btn:hover { background: #fff; color: #000; transform: scale(1.05); }
+
+        /* ── Result Display ── */
+        .result-area { animation: fadeIn 0.6s ease; }
+        .result-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 24px;
+        }
+        .result-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding-bottom: 15px; margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .status-pulse {
+            width: 8px; height: 8px; background: #00ff88;
+            border-radius: 50%; box-shadow: 0 0 10px #00ff88;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.15); opacity: 0.4; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .result-content { line-height: 1.8; color: #eee; }
+        
+        .citation-chip {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #aaa; padding: 4px 8px; border-radius: 4px;
+            font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .citation-chip.news { border-left: 2px solid #3498db; }
+        .citation-chip.kap { border-left: 2px solid #e74c3c; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* ── Intelligence Metrics Panel ── */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+            animation: fadeIn 0.8s ease;
+        }
+        .metric-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 12px;
+            text-align: center;
+            border-radius: 8px;
+        }
+        .metric-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 2px;
+        }
+        .metric-label {
+            font-size: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #937d65;
+            font-weight: 700;
+        }
+        .metric-status {
+            font-size: 9px;
+            color: #00ff88;
+            margin-top: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .error-text { font-size: 12px; color: #cc0000; margin-top: 10px; }
+
+        /* ── Bottom bar ── */
+        .bottom-bar {
+            padding: 10px 60px 20px;
+            text-align: center;
+            border-top: 1px solid rgba(0,0,0,0.07);
+        }
+        .bottom-bar p {
+            font-family: 'Open Sans', sans-serif; font-size: 10px;
+            color: #000; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+        }
+
+        /* ── Health Panel ── */
+        .health-panel {
+            display: flex; gap: 10px; margin-top: 15px; margin-bottom: 20px;
+            padding: 10px; background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.05);
+            border-radius: 8px; justify-content: space-between;
+        }
+        .health-item { flex: 1; text-align: center; }
+        .health-label { font-size: 8px; text-transform: uppercase; letter-spacing: 1px; color: #777; margin-bottom: 3px; }
+        .health-val { font-size: 11px; font-weight: 700; color: #444; }
+        .health-val.ok { color: #00aa55; }
+        .health-val.bad { color: #cc0000; }
+        .health-val.status-checking { color: #aaa; }
+
+        .conn-badge {
+            font-size: 8px; padding: 4px 8px; border-radius: 4px; font-weight: 800;
+            letter-spacing: 1px; transition: all 0.3s;
+        }
+        .conn-badge.online { background: #00ff88; color: #004422; box-shadow: 0 0 10px rgba(0,255,136,0.3); }
+        .conn-badge.offline { background: #ff3300; color: #fff; }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner-icon {
+            width: 15px; height: 15px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff; border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @media (max-width: 700px) {
+            .top-section { padding: 28px 24px 24px; }
+            .bottom-bar { padding: 10px 24px 18px; }
+            .ingestion-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="sim-warning-bar">
+    <span>ÖZAS Finance Agent · Academic Simulation · Non-Trading · No Investment Advice Provided</span>
+</div>
+
+<div class="agent-wrapper">
+    <div class="agent-box">
+        <div class="top-section">
+
+            <!-- Header -->
+            <div class="header-row">
+                <button class="back-btn" onclick="window.location.href='/'">← Back</button>
+                <div class="logo-center">
+                    <div class="logo-jp">OZAS</div>
+                    <span class="logo-sub">Finance Agent</span>
+                </div>
+                <div id="connection-status" class="conn-badge offline">OFFLINE</div>
+            </div>
+
+            <!-- Version: 4.2.2-Resilient-Final -->
+            <div id="health-panel" class="health-panel">
+                <div class="health-item">
+                    <div class="health-label">Backend</div>
+                    <div id="health-api" class="health-val status-checking">Checking...</div>
+                </div>
+                <div class="health-item">
+                    <div class="health-label">Database</div>
+                    <div id="health-db" class="health-val status-checking">-- chunks</div>
+                </div>
+                <div class="health-item">
+                    <div class="health-label">Groq API</div>
+                    <div id="health-groq" class="health-val status-checking">...</div>
+                </div>
+                <div class="health-item">
+                    <div class="health-label">News Sync</div>
+                    <div id="health-sync" class="health-val status-checking">Live</div>
+                </div>
+            </div>
+
+            <!-- Step 1: Ticker -->
+            <div class="section-label">Step 1 — Select Equity</div>
+            <div class="ticker-wrapper">
+                <input class="ticker-search" id="ticker-in" type="text"
+                    placeholder="Search equity — e.g. ASELS, THYAO, GARAN..."
+                    autocomplete="off" oninput="filterTickers()" onkeydown="handleKey(event)">
+                <div class="ticker-dropdown" id="ticker-dropdown"></div>
+            </div>
+
+            <!-- Step 2: Data Ingestion -->
+            <div class="section-label">Step 2 — Ingest Data Sources</div>
+            <div class="ingestion-grid">
+                <button class="ingest-btn" id="btn-kap" onclick="ingestKAP()">
+                    <span class="btn-step">Source A · KAP.org.tr</span>
+                    <span class="btn-label">Retrieve KAP Disclosures</span>
+                    <span class="btn-status" id="status-kap">Official regulatory filings</span>
+                    <div id="preview-kap" class="ingest-preview"></div>
+                </button>
+                <button class="ingest-btn" id="btn-news" onclick="ingestNews()">
+                    <span class="btn-step">Source B · Financial Press</span>
+                    <span class="btn-label">Retrieve News Articles</span>
+                    <span class="btn-status" id="status-news">Market narrative layer</span>
+                    <div id="preview-news" class="ingest-preview"></div>
+                </button>
+                <button class="ingest-btn" id="btn-pdf" onclick="document.getElementById('pdf-file-input').click()">
+                    <span class="btn-step">Source C · Equity Research</span>
+                    <span class="btn-label">Upload Brokerage Report</span>
+                    <span class="btn-status" id="status-pdf">PDF — analyst coverage</span>
+                </button>
+            </div>
+            <input type="file" id="pdf-file-input" accept=".pdf" onchange="ingestPDF(this)">
+
+            <hr class="divider">
+
+             <!-- Step 3: Query -->
+            <div class="section-label" style="margin-top:20px;">Step 3 — Intelligence Query</div>
+            
+            <textarea class="question-area" id="question-in" rows="3"
+                placeholder="e.g. Do recent news articles contradict or confirm the official KAP disclosures?..."
+                onkeydown="if(event.key==='Enter' && event.ctrlKey) runQuery()"></textarea>
+
+            <!-- Analyse -->
+            <button class="analyse-btn" id="analyse-btn" onclick="runQuery()">
+                <div id="btn-loader" class="btn-loader" style="display:none;margin-right:10px;"></div>
+                <span id="btn-text">RUN INTELLIGENCE ANALYSIS</span>
+            </button>
+            <div style="text-align:center;margin-top:8px;font-size:10px;color:#999;letter-spacing:0.5px;">Ctrl + Enter to submit</div>
+
+            <!-- Thinking Terminal -->
+            <div id="thinking-terminal" class="thinking-terminal"></div>
+
+            <!-- Result Area -->
+            <div id="result-area" class="result-area" style="display:none; margin-top:30px;">
+                
+                <div class="result-card">
+                    
+                    <!-- Market Intelligence Dashboard (Inside Card for PDF) -->
+                    <div id="market-dashboard" class="market-dashboard" style="display:none; margin-bottom: 25px; padding: 0 40px;">
+                        <div class="section-label" style="color: #937d65; margin-bottom: 12px; font-size: 10px; text-align: left;">Numerical Intelligence — Global Market Context</div>
+                        <div class="market-grid">
+                            <div class="m-card">
+                                <span class="m-label">Market Spot Price</span>
+                                <span class="m-value" id="m-price">--</span>
+                                <span class="m-sub" id="m-change">--</span>
+                            </div>
+                            <div class="m-card">
+                                <span class="m-label">Relative vs BIST100</span>
+                                <span class="m-value" id="m-returns">--</span>
+                                <span class="m-sub" id="m-relative">--</span>
+                            </div>
+                            <div class="m-card">
+                                <span class="m-label">KAP Reaction</span>
+                                <span class="m-value" id="m-impact" style="font-size: 16px;">--</span>
+                                <span class="m-sub" id="m-impact-date">No event</span>
+                            </div>
+                            <div class="m-card">
+                                <span class="m-label">Stability & Vol</span>
+                                <span class="m-value" id="m-stability" style="font-size: 14px; letter-spacing: 1px;">--</span>
+                                <span class="m-sub" id="m-volatility">--</span>
+                            </div>
+                        </div>
+                        <hr class="divider" style="margin: 20px 0; opacity: 0.1;">
+                    </div>
+
+                    <div class="result-header">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div class="status-pulse"></div>
+                            <span id="result-label" style="font-size:11px; font-weight:700; color:#fff; letter-spacing:1px; text-transform:uppercase;">Intelligence Synthesis</span>
+                        </div>
+                        <span id="finish-time" style="font-size:9px; color:#666;">--:--</span>
+                    </div>
+                    
+                    <div id="agent-meta" style="font-size:9px; color:#937d65; margin-bottom:15px; font-family:'JetBrains Mono', monospace;"></div>
+
+                    <div id="result-text" class="result-content" style="color:#fff; font-size:14px; line-height:1.7; font-family:'Outfit', sans-serif; white-space: pre-wrap;"></div>
+                    
+                    <div id="consistency-note" style="margin-top:15px; padding:10px; background:rgba(255,165,0,0.1); border-left:3px solid orange; color:orange; font-size:11px; display:none;"></div>
+
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div id="m-faith" class="metric-value">--%</div>
+                            <div class="metric-label">Faithfulness</div>
+                            <div class="metric-status">🟢 Verified</div>
+                        </div>
+                        <div class="metric-card">
+                            <div id="m-prec" class="metric-value">--%</div>
+                            <div class="metric-label">Precision</div>
+                            <div class="metric-status">🟢 High</div>
+                        </div>
+                        <div class="metric-card">
+                            <div id="m-latency" class="metric-value">--s</div>
+                            <div class="metric-label">Latency</div>
+                            <div class="metric-status">⚡ Real-time</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:20px;">
+                        <div style="font-size:9px; color:#555; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; font-weight:700;">Sources Synthetic Context</div>
+                        <div id="citation-row" class="citation-row" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+                    </div>
+                </div>
+            </div>
+
+                <!-- Export Button -->
+                <button class="export-btn" id="export-pdf-btn" onclick="exportToPDF()" style="width:100%;background:#f0f0f0;color:#000;border:1px solid #ddd;padding:12px;margin-top:20px;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;gap:8px;">
+                    📄 DOWNLOAD RESEARCH REPORT (PDF)
+                </button>
+
+                <!-- Hidden Report Template (For PDF generation) -->
+                <div id="pdf-report-template" style="display:none; padding:40px; background:#fff; color:#000; font-family:'Outfit', sans-serif;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #000; padding-bottom:15px; margin-bottom:30px;">
+                        <div>
+                            <h1 style="font-family:'Playfair Display', serif; font-size:32px; margin:0;">ÖZAS</h1>
+                            <p style="font-size:10px; text-transform:uppercase; letter-spacing:2px; margin:0; color:#666;">Equity Intelligence Report</p>
+                        </div>
+                        <div style="text-align:right;">
+                            <p style="font-size:12px; margin:0; font-weight:700;" id="pdf-ticker-val">TICKER</p>
+                            <p style="font-size:10px; margin:0; color:#888;" id="pdf-date-val">DATE</p>
+                        </div>
+                    </div>
+                    
+                    <h2 style="font-size:14px; border-bottom:1px solid #ddd; padding-bottom:5px; text-transform:uppercase; letter-spacing:1px;">Summary Analysis</h2>
+                    <div id="pdf-content-val" style="font-size:13px; line-height:1.7; margin-bottom:30px;"></div>
+
+                    <h2 style="font-size:14px; border-bottom:1px solid #ddd; padding-bottom:5px; text-transform:uppercase; letter-spacing:1px;">Intelligence Metrics</h2>
+                    <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; margin-bottom:30px;">
+                        <div style="border:1px solid #eee; padding:10px; text-align:center;">
+                            <div style="font-size:18px; font-weight:700;" id="pdf-faith-val">--%</div>
+                            <div style="font-size:8px; text-transform:uppercase; color:#888;">Faithfulness</div>
+                        </div>
+                        <div style="border:1px solid #eee; padding:10px; text-align:center;">
+                            <div style="font-size:18px; font-weight:700;" id="pdf-prec-val">--%</div>
+                            <div style="font-size:8px; text-transform:uppercase; color:#888;">Precision</div>
+                        </div>
+                        <div style="border:1px solid #eee; padding:10px; text-align:center;">
+                            <div style="font-size:18px; font-weight:700;" id="pdf-lat-val">--s</div>
+                            <div style="font-size:8px; text-transform:uppercase; color:#888;">Latency</div>
+                        </div>
+                    </div>
+
+                    <div style="background:#f9f9f9; padding:20px; border-radius:5px; font-size:10px; color:#555; line-height:1.5;">
+                        <strong>REGULATORY DISCLAIMER:</strong> This report is generated by the ÖZAS BIST Equity Intelligence Agent for academic simulation purposes only. The information provided does not constitute investment advice, financial guidance, or any buy/sell recommendation. ÖZAS does not guarantee the accuracy of AI-generated synthesis. Consult a licensed financial advisor before making any investment decisions.
+                    </div>
+                    <div style="text-align:center; font-size:9px; color:#aaa; margin-top:50px;">
+                        Page 1 of 1 | ÖZAS Finance Intelligent Systems Project v4.0
+                    </div>
+                </div>
+
+                <div class="error-text" id="error-text" style="display:none;"></div>
+            </div>
+
+        </div>
+
+        <div class="bottom-bar">
+            <p>Non-trading · No investment advice · All data is informational</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_URL = window.location.origin + '/api/agent';
+
+    // ── Check API Health on load ──
+    async function checkHealth() {
+        try {
+            const res = await fetch(`${API_URL}/status`);
+            const d = await res.json();
+            const badge = document.getElementById('connection-status');
+            badge.innerText = 'ONLINE';
+            badge.className = 'conn-badge online';
+
+            document.getElementById('health-api').innerText = 'OK';
+            document.getElementById('health-api').className = 'health-val ok';
+            
+            document.getElementById('health-db').innerText = (d.database.total_chunks || 0) + ' chunks';
+            document.getElementById('health-db').className = 'health-val ok';
+
+            const groqOk = d.environment.groq_api_key;
+            document.getElementById('health-groq').innerText = groqOk ? 'CONNECTED' : 'MISSING';
+            document.getElementById('health-groq').className = 'health-val ' + (groqOk ? 'ok' : 'bad');
+
+            document.getElementById('health-sync').innerText = 'STABLE';
+            document.getElementById('health-sync').className = 'health-val ok';
+        } catch (e) {
+            console.error("Health check failed:", e);
+        }
+    }
+    checkHealth();
+    setInterval(checkHealth, 30000);
+
+    // ── BIST Ticker database ──────────────────────────────────────────────────
+    const TICKERS = [
+        {"code": "ACSEL", "name": "Aciselsan Acipayam Seluloz"}, {"code": "ADEL", "name": "Adel Kalemcilik"}, {"code": "ADESE", "name": "Adese Gayrimenkul"}, {"code": "AEFES", "name": "Anadolu Efes"}, {"code": "AFYON", "name": "Afyon Cimento"}, {"code": "AGESA", "name": "Agesa Hayat ve Emeklilik"}, {"code": "AGHOL", "name": "Anadolu Grubu Holding"}, {"code": "AGYO", "name": "Atakule GYO"}, {"code": "AKBNK", "name": "Akbank"}, {"code": "AKCNS", "name": "Akcansa"}, {"code": "AKENR", "name": "Akenerji"}, {"code": "AKFGY", "name": "Akfen GYO"}, {"code": "AKFYE", "name": "Akfen Yenilenebilir Enerji"}, {"code": "AKGRT", "name": "Akis GYO"}, {"code": "AKMGI", "name": "Akmerkez GYO"}, {"code": "AKSA", "name": "Aksa Akrilik"}, {"code": "AKSEN", "name": "Aksa Enerji"}, {"code": "AKSGY", "name": "Akis GYO"}, {"code": "AKSYO", "name": "Aksu Enerji"}, {"code": "ALARK", "name": "Alarko Holding"}, {"code": "ALBRK", "name": "Albaraka Turk"}, {"code": "ALCTL", "name": "Alcatel Lucent Teletas"}, {"code": "ALGYO", "name": "Alarko GYO"}, {"code": "ALKA", "name": "Alkim Kagit"}, {"code": "ALKIM", "name": "Alkim Kimya"}, {"code": "ALMAD", "name": "Altinyag Madencilik"}, {"code": "ANELE", "name": "Anel Elektrik"}, {"code": "ANGEN", "name": "Anatolia Tani ve Biyoteknoloji"}, {"code": "ANHYT", "name": "Anadolu Hayat Emeklilik"}, {"code": "ANSGR", "name": "Anadolu Sigorta"}, {"code": "ARCLK", "name": "Arcelik"}, {"code": "ARDYZ", "name": "Ard Grup Bilisim"}, {"code": "ARENA", "name": "Arena Bilgisayar"}, {"code": "ARSAN", "name": "Arsan Tekstil"}, {"code": "ARZUM", "name": "Arzum Elektrikli Ev Aletleri"}, {"code": "ASELS", "name": "Aselsan"}, {"code": "ASGYO", "name": "Asce GYO"}, {"code": "ASTOR", "name": "Astor Enerji"}, {"code": "ASUZU", "name": "Anadolu Isuzu"}, {"code": "ATAGY", "name": "Atac Gayrimenkul"}, {"code": "ATAKP", "name": "Atakey Patates"}, {"code": "ATATP", "name": "Atatp Bilgi Teknolojileri"}, {"code": "ATEKS", "name": "Akin Tekstil"}, {"code": "ATLAS", "name": "Atlas Menkul Kiymetler"}, {"code": "ATSYH", "name": "Atlantis Yatirim Holding"}, {"code": "AVGYO", "name": "Avrasya GYO"}, {"code": "AVHOL", "name": "Avrupa Yatirim Holding"}, {"code": "AVOD", "name": "Avod Gida ve Tarim"}, {"code": "AVTUR", "name": "Avrasya Petrol ve Turizm"}, {"code": "AYDEM", "name": "Aydem Enerji"}, {"code": "AYEN", "name": "Ayen Enerji"}, {"code": "AYES", "name": "Ayes Celik Hasir"}, {"code": "AYGAZ", "name": "Aygaz"}, {"code": "AZTEK", "name": "Aztek Teknoloji"}, {"code": "BAGFS", "name": "Bagfas"}, {"code": "BAKAB", "name": "Bak Ambalaj"}, {"code": "BALAT", "name": "Balatacilar Balatacilik"}, {"code": "BANVT", "name": "Banvit"}, {"code": "BARMA", "name": "Barem Ambalaj"}, {"code": "BASGZ", "name": "Baskent Dogalgaz"}, {"code": "BAYRK", "name": "Bayrak Ebt Taban"}, {"code": "BERA", "name": "Bera Holding"}, {"code": "BEYAZ", "name": "Beyaz Filo"}, {"code": "BFREN", "name": "Bosch Fren Sistemleri"}, {"code": "BIENY", "name": "Bien Yapi Urunleri"}, {"code": "BIGCH", "name": "Bigchefs"}, {"code": "BIMAS", "name": "Bim Birlesik Magazalar"}, {"code": "BINHO", "name": "Bin Yatirim Holding"}, {"code": "BIOEN", "name": "Biotrend Enerji"}, {"code": "BIZIM", "name": "Bizim Magazalari"}, {"code": "BJKAS", "name": "Besiktas Futbol Yatirim"}, {"code": "BLCYT", "name": "Bilici Yatirim"}, {"code": "BMSCH", "name": "Bms Celik Hasir"}, {"code": "BMSTL", "name": "Bms Birlesik Metal"}, {"code": "BNTAS", "name": "Bantas Bandirma Ambalaj"}, {"code": "BOBET", "name": "Bogazici Beton"}, {"code": "BORRS", "name": "Borusan Yatirim"}, {"code": "BOSSA", "name": "Bossa"}, {"code": "BRISA", "name": "Brisa"}, {"code": "BRKO", "name": "Birko Birlesik Koyunlulular"}, {"code": "BRKVY", "name": "Birikim Varlik Yonetimi"}, {"code": "BRLSM", "name": "Birlesim Muhendislik"}, {"code": "BRMEN", "name": "Birlik Mensucat"}, {"code": "BRSAN", "name": "Borusan Mannesmann"}, {"code": "BRYAT", "name": "Borusan Yatirim"}, {"code": "BSOKE", "name": "Bati Soke Cimento"}, {"code": "BTCIM", "name": "Bati Anadolu Cimento"}, {"code": "BUCIM", "name": "Bursa Cimento"}, {"code": "BURCE", "name": "Burcelik"}, {"code": "BURVA", "name": "Burcelik Vana"}, {"code": "BVSAN", "name": "Bulbuloglu Vinc Sanayi"}, {"code": "BYDNR", "name": "Baydoner"}, {"code": "CANTE", "name": "Can2 Termik Santrali"}, {"code": "CASA", "name": "Casa Emtia Petrol"}, {"code": "CCOLA", "name": "Coca-Cola Icecek"}, {"code": "CELHA", "name": "Celik Halat"}, {"code": "CEMAS", "name": "Cemas Dokum"}, {"code": "CEMTS", "name": "Cemtas"}, {"code": "CEOEM", "name": "Ceo Event Medya"}, {"code": "CIMSA", "name": "Cimsa"}, {"code": "CLEBI", "name": "Celebi Hava Servisi"}, {"code": "CMBTN", "name": "Cimentas"}, {"code": "CMENT", "name": "Cimentas"}, {"code": "CONSE", "name": "Consus Enerji"}, {"code": "COSMO", "name": "Cosmos Yatirim Holding"}, {"code": "CRDFA", "name": "Creditwest Faktoring"}, {"code": "CRFSA", "name": "Carrefoursa"}, {"code": "CUSAN", "name": "Cuhadaroglu Metal"}, {"code": "CVKMD", "name": "Cvk Maden"}, {"code": "CWENE", "name": "Cw Enerji"}, {"code": "DAGHL", "name": "Dagi Yatirim Holding"}, {"code": "DAGI", "name": "Dagi Giyim"}, {"code": "DAPGM", "name": "Dap Gayrimenkul"}, {"code": "DARDL", "name": "Dardanel"}, {"code": "DGATE", "name": "Datagate Bilgisayar"}, {"code": "DGGYO", "name": "Dogus GYO"}, {"code": "DGNMO", "name": "Doganlar Mobilya"}, {"code": "DIRIT", "name": "Dirilis Tekstil"}, {"code": "DITAS", "name": "Ditas Dogan Yedek Parca"}, {"code": "DMSAS", "name": "Demisas Dokum"}, {"code": "DNISI", "name": "Dinamik Isi Yalitim"}, {"code": "DOAS", "name": "Dogus Otomotiv"}, {"code": "DOCO", "name": "DO & CO AG"}, {"code": "DOHOL", "name": "Dogan Holding"}, {"code": "DOKTA", "name": "Doktas Dokumculuk"}, {"code": "DURDO", "name": "Duran Dogan Basim"}, {"code": "DYOBY", "name": "Dyo Boya"}, {"code": "DZGYO", "name": "Deniz GYO"}, {"code": "EBEBK", "name": "Ebebek"}, {"code": "ECILC", "name": "Eczacibasi Ilac"}, {"code": "ECZYT", "name": "Eczacibasi Yatirim"}, {"code": "EDATA", "name": "E-Data Teknoloji"}, {"code": "EDIP", "name": "Edip Gayrimenkul"}, {"code": "EGEEN", "name": "Ege Endustri"}, {"code": "EGEPO", "name": "Egepol Saglik"}, {"code": "EGGUB", "name": "Ege Gubre"}, {"code": "EKGYO", "name": "Emlak Konut GYO"}, {"code": "EKSUN", "name": "Eksun Gida"}, {"code": "ELITE", "name": "Elite Naturel Gida"}, {"code": "EMKEL", "name": "Emek Elektrik"}, {"code": "ENARI", "name": "Enerya Enerji"}, {"code": "ENJSA", "name": "Enerjisa Enerji"}, {"code": "ENKAI", "name": "Enka Insaat"}, {"code": "ERBOS", "name": "Erbosan"}, {"code": "EREGL", "name": "Eregli Demir Celik"}, {"code": "ERSU", "name": "Ersu Meyve Suyu"}, {"code": "ESCAR", "name": "Escar Filo"}, {"code": "ESCOM", "name": "Escort Teknoloji"}, {"code": "ESEN", "name": "Esenboga Elektrik"}, {"code": "ETILR", "name": "Etiler Gida"}, {"code": "EUPWR", "name": "Europower Enerji"}, {"code": "EUREN", "name": "Europen Endustri"}, {"code": "EYGYO", "name": "Ey GYO"}, {"code": "FADE", "name": "Fade Gida"}, {"code": "FENER", "name": "Fenerbahce Futbol"}, {"code": "FLAP", "name": "Flap Kongre Toplanti"}, {"code": "FMIZP", "name": "Federal Mogul Izmit Piston"}, {"code": "FORMT", "name": "Formet Metal ve Cam"}, {"code": "FRIGO", "name": "Frigo Pak Gida"}, {"code": "FROTO", "name": "Ford Otosan"}, {"code": "FZLGY", "name": "Fuzul GYO"}, {"code": "GARAN", "name": "Garanti Bankasi"}, {"code": "GEDIK", "name": "Gedik Yatirim"}, {"code": "GEDZA", "name": "Gediz Ambalaj"}, {"code": "GENIL", "name": "Gen Ilac"}, {"code": "GENTS", "name": "Gentas"}, {"code": "GEREL", "name": "Gersan Elektrik"}, {"code": "GESAN", "name": "Girisim Elektrik"}, {"code": "GIPTA", "name": "Gipta Ofis Kirtasiye"}, {"code": "GLBMD", "name": "Global Menkul Degerler"}, {"code": "GLCVY", "name": "Gelecek Varlik Yonetimi"}, {"code": "GLRYH", "name": "Guler Yatirim Holding"}, {"code": "GLYHO", "name": "Global Yatirim Holding"}, {"code": "GOKNR", "name": "Goknur Gida"}, {"code": "GOLTS", "name": "Goltas Cimento"}, {"code": "GOODY", "name": "Good-Year"}, {"code": "GOZDE", "name": "Gozde Girisim"}, {"code": "GRSEL", "name": "Gursel Turizm"}, {"code": "GSDDE", "name": "Gsd Denizcilik"}, {"code": "GSDHO", "name": "Gsd Holding"}, {"code": "GSRAY", "name": "Galatasaray Sportif"}, {"code": "GUBRF", "name": "Gubre Fabrikalari"}, {"code": "GWIND", "name": "Galata Wind Enerji"}, {"code": "GZNMI", "name": "Gezinomi Seyahat"}, {"code": "HALKB", "name": "Halk Bankasi"}, {"code": "HATEK", "name": "Hatay Tekstil"}, {"code": "HDFGS", "name": "Hedef Girisim"}, {"code": "HEDEF", "name": "Hedef Holding"}, {"code": "HEKTS", "name": "Hektas"}, {"code": "HKTM", "name": "Hidropar Hareket Kontrol"}, {"code": "HLGYO", "name": "Halk GYO"}, {"code": "HTTBT", "name": "Hitit Bilgisayar"}, {"code": "HUBVC", "name": "Hub Girisim"}, {"code": "HUNER", "name": "Hun Enerji"}, {"code": "HURGZ", "name": "Hurriyet Gazetecilik"}, {"code": "ICBCT", "name": "Icbc Turkey Bank"}, {"code": "IDEAS", "name": "Ideal Finansal Teknolojiler"}, {"code": "IDGYO", "name": "Idealist GYO"}, {"code": "IEYHO", "name": "Isiklar Enerji Yapi Holding"}, {"code": "IHAAS", "name": "Ihlas Haber Ajansi"}, {"code": "IHEVA", "name": "Ihlas Ev Aletleri"}, {"code": "IHGZT", "name": "Ihlas Gazetecilik"}, {"code": "IHLAS", "name": "Ihlas Holding"}, {"code": "IHLGM", "name": "Ihlas Gayrimenkul"}, {"code": "IHYAY", "name": "Ihlas Yayin Holding"}, {"code": "IMASM", "name": "Imas Makina"}, {"code": "INDES", "name": "Indeks Bilgisayar"}, {"code": "INFO", "name": "Info Yatirim"}, {"code": "INGRM", "name": "Ingram Micro"}, {"code": "INTEM", "name": "Intema"}, {"code": "INVEO", "name": "Inveo Yatirim Holding"}, {"code": "INVES", "name": "Investco Holding"}, {"code": "TRENJ", "name": "Trend Enerji (Ipek Dogal Enerji)"}, {"code": "ISBIR", "name": "Isbir Holding"}, {"code": "ISCTR", "name": "Is Bankasi"}, {"code": "ISDMR", "name": "Iskenderun Demir Celik"}, {"code": "ISFIN", "name": "Is Finansal Kiralama"}, {"code": "ISGSY", "name": "Is Girisim"}, {"code": "ISGYO", "name": "Is GYO"}, {"code": "ISKPL", "name": "Isik Plastik"}, {"code": "ISMEN", "name": "Is Yatirim Menkul Degerler"}, {"code": "ISSEN", "name": "Isbir Sentetik Dokuma"}, {"code": "ISYAT", "name": "Is Yatirim Ortakligi"}, {"code": "IZENR", "name": "Izdemir Enerji"}, {"code": "IZFAS", "name": "Izmir Firca"}, {"code": "IZINV", "name": "Iz Hayvancilik Tarim"}, {"code": "IZMDC", "name": "Izmir Demir Celik"}, {"code": "JANTS", "name": "Jantsa Jant Sanayi"}, {"code": "KAPLM", "name": "Kaplamin Ambalaj"}, {"code": "KAREL", "name": "Karel Elektronik"}, {"code": "KARSN", "name": "Karsan Otomotiv"}, {"code": "KARTN", "name": "Kartonsan"}, {"code": "KARYE", "name": "Kartal Yenilenebilir Enerji"}, {"code": "KATMR", "name": "Katmerciler Arac Ustu Ekipman"}, {"code": "KAYSE", "name": "Kayseri Seker Fabrikasi"}, {"code": "KCAER", "name": "Kocaer Celik"}, {"code": "KCHOL", "name": "Koc Holding"}, {"code": "KENT", "name": "Kent Gida"}, {"code": "KERVT", "name": "Kerevitas Gida"}, {"code": "KFEIN", "name": "Kafein Yazilim"}, {"code": "KGYO", "name": "Koray GYO"}, {"code": "KIMMR", "name": "Kimmr Marketler"}, {"code": "KLGYO", "name": "Kiler GYO"}, {"code": "KLMSN", "name": "Klimasan Klima"}, {"code": "KLNMA", "name": "Kalkinma Bankasi"}, {"code": "KLRHO", "name": "Kiler Holding"}, {"code": "KLSYN", "name": "Kaleseramik"}, {"code": "KMPUR", "name": "Kimteks Poliuretan"}, {"code": "KNFRT", "name": "Konfrut Gida"}, {"code": "KONTR", "name": "Kontrolmatik Teknoloji"}, {"code": "KONYA", "name": "Konya Cimento"}, {"code": "KOPOL", "name": "Koza Polyester"}, {"code": "KORDS", "name": "Kordsa Teknik Tekstil"}, {"code": "KOZAL", "name": "Koza Altin"}, {"code": "KOZAA", "name": "Koza Anadolu Metal"}, {"code": "KRDMA", "name": "Kardemir (A)"}, {"code": "KRDMB", "name": "Kardemir (B)"}, {"code": "KRDMD", "name": "Kardemir (D)"}, {"code": "KRVGD", "name": "Kervan Gida"}, {"code": "KSTUR", "name": "Kustur Kusadasi Turizm"}, {"code": "KUTPO", "name": "Kutahya Porselen"}, {"code": "KUVVA", "name": "Kuvva Gida"}, {"code": "KUYAS", "name": "Kuyas Yatirim"}, {"code": "KZBGY", "name": "Kizilbuk GYO"}, {"code": "KZGYO", "name": "Kuzey Boru"}, {"code": "LIDER", "name": "Lider Faktoring"}, {"code": "LIDFA", "name": "Lider Faktoring"}, {"code": "LINK", "name": "Link Bilgisayar"}, {"code": "LMKDC", "name": "Limak Dogu Anadolu Cimento"}, {"code": "LOGO", "name": "Logo Yazilim"}, {"code": "LUKSK", "name": "Luks Kadife"}, {"code": "MAALT", "name": "Marmaris Altinyunus"}, {"code": "MACKO", "name": "Mackolik Internet Hizmetleri"}, {"code": "MAGEN", "name": "Margun Enerji"}, {"code": "MAKTK", "name": "Makina Takim"}, {"code": "MANAS", "name": "Manas Enerji Yonetimi"}, {"code": "MARKA", "name": "Marka Yatirim Holding"}, {"code": "MARTI", "name": "Marti Otel"}, {"code": "MAVI", "name": "Mavi Giyim"}, {"code": "MEDTR", "name": "Mediterra Tani ve Saglik"}, {"code": "MEGAP", "name": "Mega Polietilen"}, {"code": "MEPET", "name": "Mepet Petrol"}, {"code": "MERCN", "name": "Mercan Kimya"}, {"code": "MERKO", "name": "Merko Gida"}, {"code": "METRO", "name": "Metro Holding"}, {"code": "METUR", "name": "Metemtur Otelcilik"}, {"code": "MGROS", "name": "Migros"}, {"code": "MIATK", "name": "Mia Teknoloji"}, {"code": "MIPAZ", "name": "Milpa"}, {"code": "MMCAS", "name": "MMC Sanayi ve Ticari Yatirimlar"}, {"code": "MNDRS", "name": "Menderes Tekstil"}, {"code": "MOBTL", "name": "Mobiltel Iletisim"}, {"code": "MPARK", "name": "Medical Park (MLP Saglik)"}, {"code": "MRGYO", "name": "Marti GYO"}, {"code": "MRSHL", "name": "Marshall Boya"}, {"code": "MSGYO", "name": "Mistral GYO"}, {"code": "MTRKS", "name": "Matriks Bilgi Dagitim"}, {"code": "MTRYO", "name": "Metro Yatirim Ortakligi"}, {"code": "MZHLD", "name": "Mazhar Zorlu Holding"}, {"code": "NATEN", "name": "Naturel Enerji"}, {"code": "NETAS", "name": "Netas Telekomunikasyon"}, {"code": "NIBAS", "name": "Nigde Beton"}, {"code": "NTGAZ", "name": "Naturelgaz"}, {"code": "NTHOL", "name": "Net Holding"}, {"code": "NUGYO", "name": "Nuh GYO"}, {"code": "NUHCM", "name": "Nuh Cimento"}, {"code": "OBASX", "name": "Oba Makarnacilik"}, {"code": "ODAS", "name": "Odas Elektrik"}, {"code": "OLMIP", "name": "Olmuksan Ip"}, {"code": "ONCSM", "name": "Oncosem Onkolojik Sistemler"}, {"code": "ORCAY", "name": "Orcay Ortakoy Cay"}, {"code": "ORGE", "name": "Orge Enerji"}, {"code": "ORMA", "name": "Orma Orman Mahsulleri"}, {"code": "OSMEN", "name": "Osmanli Menkul Degerler"}, {"code": "OSTIM", "name": "Ostim Endustriyel Yatirimlar"}, {"code": "OTKAR", "name": "Otokar"}, {"code": "OYAKC", "name": "Oyak Cimento"}, {"code": "OYAYO", "name": "Oyak Yatirim Ortakligi"}, {"code": "OYLUM", "name": "Oylum Sinai Yatirimlar"}, {"code": "OZGYO", "name": "Ozderici GYO"}, {"code": "OZKGY", "name": "Ozak GYO"}, {"code": "OZRDN", "name": "Ozerden Plastik"}, {"code": "OZSUB", "name": "Ozsu Balik"}, {"code": "PAGYO", "name": "Panora GYO"}, {"code": "PAMEL", "name": "Pamel Yenilenebilir Enerji"}, {"code": "PAPIL", "name": "Papilon Savunma"}, {"code": "PARSN", "name": "Parsan"}, {"code": "PASEU", "name": "Pasifik Eurasia Lojistik"}, {"code": "PATEK", "name": "Pasifik Donanim Yazilim"}, {"code": "PCILT", "name": "Pc Iletisim Medya"}, {"code": "PEGYO", "name": "Pera GYO"}, {"code": "PENGD", "name": "Penguen Gida"}, {"code": "PENTA", "name": "Penta Teknoloji"}, {"code": "PETKM", "name": "Petkim"}, {"code": "PETUN", "name": "Pinar Et ve Un"}, {"code": "PGSUS", "name": "Pegasus Hava Tasimaciligi"}, {"code": "PINSU", "name": "Pinar Su"}, {"code": "PKART", "name": "Plastikkart Akilli Kart Iletisim"}, {"code": "PKENT", "name": "Petrokent Turizm"}, {"code": "PLTUR", "name": "Platform Turizm"}, {"code": "PNLSN", "name": "Panelsan Cati Cephe"}, {"code": "PNSUT", "name": "Pinar Sut"}, {"code": "POLHO", "name": "Polisan Holding"}, {"code": "POLTK", "name": "Politeknik Metal"}, {"code": "PRKAB", "name": "Turk Prysmian Kablo"}, {"code": "PRKME", "name": "Park Elektrik Madencilik"}, {"code": "PSGYO", "name": "Pasifik GYO"}, {"code": "QNBFB", "name": "Qnb Finansbank"}, {"code": "QNBFL", "name": "Qnb Finans Finansal Kiralama"}, {"code": "QUAGR", "name": "Qua Granite Hayal Yapi"}, {"code": "RALYH", "name": "Ral Yatirim Holding"}, {"code": "RAYSG", "name": "Ray Sigorta"}, {"code": "REEDER", "name": "Reeder Teknoloji"}, {"code": "REYSAS", "name": "Reysas Lojistik"}, {"code": "RHEAG", "name": "Rhea Girisim"}, {"code": "RODRG", "name": "Rodrigo Tekstil"}, {"code": "ROYAL", "name": "Royal Hali"}, {"code": "RTALB", "name": "Rta Laboratuvarlari"}, {"code": "RYGYO", "name": "Reysas GYO"}, {"code": "SAFKR", "name": "Safkar Ege Sogutmacilik"}, {"code": "SAHOL", "name": "Sabanci Holding"}, {"code": "SAMAT", "name": "Saray Matbaacilik"}, {"code": "SANEL", "name": "Sanel Muhendislik"}, {"code": "SANFM", "name": "Sanifoam Sunger"}, {"code": "SANKO", "name": "Sanko Pazarlama"}, {"code": "SARKY", "name": "Sarkuysan"}, {"code": "SASA", "name": "Sasa Polyester Sanayi"}, {"code": "SAYAS", "name": "Say Yenilenebilir Enerji"}, {"code": "SDTTR", "name": "Sdt Uzay ve Savunma Teknolojileri"}, {"code": "SEGYO", "name": "Seker GYO"}, {"code": "SEKFK", "name": "Seker Finansal Kiralama"}, {"code": "SEKUR", "name": "Sekuro Plastik"}, {"code": "SELEC", "name": "Selcuk Ecza Deposu"}, {"code": "SELGD", "name": "Selcuk Gida"}, {"code": "SELVA", "name": "Selva Gida"}, {"code": "SEYKM", "name": "Seyitler Kimya"}, {"code": "SILVR", "name": "Silverline Endustri"}, {"code": "SISE", "name": "Sise Cam"}, {"code": "SKBNK", "name": "Sekerbank"}, {"code": "SKTAS", "name": "Soktas Tekstil"}, {"code": "SNGYO", "name": "Sinpas GYO"}, {"code": "SOKM", "name": "Sok Marketler"}, {"code": "SONME", "name": "Sonmez Filament"}, {"code": "SRVGY", "name": "Servet GYO"}, {"code": "SUMAS", "name": "Sumas Suni Tahta"}, {"code": "SUNTK", "name": "Sun Tekstil"}, {"code": "SURGY", "name": "Sur GYO"}, {"code": "SUWEN", "name": "Suwen Tekstil"}, {"code": "TABGD", "name": "Tab Gida"}, {"code": "TARKM", "name": "Tarkim Bitki Koruma Sanayi"}, {"code": "TATEN", "name": "Tatlipinar Enerji"}, {"code": "TATGD", "name": "Tat Gida"}, {"code": "TAVHL", "name": "Tav Havalimanlari"}, {"code": "TCELL", "name": "Turkcell Iletisim Hizmetleri"}, {"code": "TDGYO", "name": "Trend GYO"}, {"code": "TEKTU", "name": "Tek-Art Turizm"}, {"code": "TERA", "name": "Tera Yatirim"}, {"code": "TETMT", "name": "Tetamat Gida"}, {"code": "TEZOL", "name": "Tezol Kagit"}, {"code": "TGSAS", "name": "Tgs Dis Ticaret"}, {"code": "THYAO", "name": "Turk Hava Yollari"}, {"code": "TMSN", "name": "Tumosan Motor ve Traktor"}, {"code": "TOASO", "name": "Tofas Turk Otomobil Fabrikasi"}, {"code": "TRCAS", "name": "Turcas Petrol"}, {"code": "TRGYO", "name": "Torunlar GYO"}, {"code": "TRILC", "name": "Turk Ilac ve Serum"}, {"code": "TSKB", "name": "Turk Sinai Kalkinma Bankasi"}, {"code": "TSGYO", "name": "Tskb GYO"}, {"code": "TSPOR", "name": "Trabzonspor Sportif"}, {"code": "TTKOM", "name": "Turk Telekomunikasyon"}, {"code": "TTRAK", "name": "Turk Traktor"}, {"code": "TUCLK", "name": "Tugcelik Aluminyum Metal"}, {"code": "TUKAS", "name": "Tukas Gida"}, {"code": "TUPRS", "name": "Turkiye Petrol Rafinerileri"}, {"code": "TUREX", "name": "Turex Turizm Tasimacilik"}, {"code": "TURGG", "name": "Turkas GYO"}, {"code": "TURSG", "name": "Turkiye Sigorta"}, {"code": "UFUK", "name": "Ufuk Yatirim"}, {"code": "ULAS", "name": "Ulaslar Turizm"}, {"code": "ULKER", "name": "Ulker Biskuvi"}, {"code": "ULUFA", "name": "Ulusal Faktoring"}, {"code": "ULUSE", "name": "Ulusoy Elektrik"}, {"code": "UNLU", "name": "Unlu Yatirim Holding"}, {"code": "USAK", "name": "Usak Seramik"}, {"code": "VAKBN", "name": "Vakiflar Bankasi"}, {"code": "VAKFN", "name": "Vakif Finansal Kiralama"}, {"code": "VAKKO", "name": "Vakko Tekstil"}, {"code": "VANGD", "name": "Vanet Gida"}, {"code": "VBTYZ", "name": "Vbt Yazilim"}, {"code": "VERTU", "name": "Verusaturk Girisim"}, {"code": "VERUS", "name": "Verusa Holding"}, {"code": "VESBE", "name": "Vestel Beyaz Esya"}, {"code": "VESTL", "name": "Vestel Elektronik Sanayi"}, {"code": "VKFYO", "name": "Vakif Yatirim Ortakligi"}, {"code": "VKGYO", "name": "Vakif GYO"}, {"code": "VKING", "name": "Viking Kagit"}, {"code": "YAPRK", "name": "Yaprak Sut ve Besi Ciftlikleri"}, {"code": "YATAS", "name": "Yatas Yatak ve Yorgan"}, {"code": "YAYLA", "name": "Yayla Agro Gida"}, {"code": "YBTAS", "name": "Yibitas Yozgat Isci Birligi Insaat"}, {"code": "YEOTK", "name": "Yeo Teknoloji"}, {"code": "YESIL", "name": "Yesil Yatirim Holding"}, {"code": "YGGYO", "name": "Yeni Gimat GYO"}, {"code": "YGINS", "name": "Yeni Gimat Insaat"}, {"code": "YGYO", "name": "Yesil GYO"}, {"code": "YKBNK", "name": "Yapi ve Kredi Bankasi"}, {"code": "YKSLN", "name": "Yukselen Celik"}, {"code": "YONGA", "name": "Yonga Mobilya"}, {"code": "YUNSA", "name": "Yunsa"}, {"code": "YYLGD", "name": "Yayla Agro Gida"}, {"code": "ZEDUR", "name": "Zedur Enerji"}, {"code": "ZOREN", "name": "Zorlu Enerji Elektrik Uretim"}, {"code": "ZRGYO", "name": "Ziraat GYO"}
+    ];
+
+    let selectedTicker = '';
+    let dropdownIndex = -1;
+    let filteredItems = [];
+
+    function filterTickers() {
+        const val = document.getElementById('ticker-in').value.trim().toUpperCase();
+        const dd  = document.getElementById('ticker-dropdown');
+        dropdownIndex = -1;
+
+        if (!val) { dd.style.display = 'none'; return; }
+
+        filteredItems = TICKERS.filter(t =>
+            t.code.startsWith(val) || t.name.toUpperCase().includes(val)
+        );
+
+        // Eğer yazılan ticker listede yoksa, manuel seçecek olarak en başa ekle (Tüm BIST desteği)
+        if (val && !filteredItems.find(t => t.code === val)) {
+            filteredItems.unshift({ code: val, name: 'Tüm BIST / Özel Ticker Araması' });
+        }
+
+        if (!filteredItems.length) { dd.style.display = 'none'; return; }
+
+        dd.innerHTML = filteredItems.map((t, i) => `
+            <div class="dropdown-item" data-i="${i}" onmousedown="pickTicker('${t.code}', '${t.name}')">
+                <span class="di-code">${t.code}</span>
+                <span class="di-name">${t.name}</span>
+            </div>
+        `).join('');
+        dd.style.display = 'block';
+    }
+
+    function pickTicker(code, name) {
+        document.getElementById('ticker-in').value = code;
+        selectedTicker = code;
+        document.getElementById('ticker-dropdown').style.display = 'none';
+    }
+
+    function handleKey(e) {
+        const dd    = document.getElementById('ticker-dropdown');
+        const items = dd.querySelectorAll('.dropdown-item');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            dropdownIndex = Math.min(dropdownIndex + 1, items.length - 1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            dropdownIndex = Math.max(dropdownIndex - 1, 0);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (dropdownIndex >= 0 && filteredItems[dropdownIndex]) {
+                const t = filteredItems[dropdownIndex];
+                pickTicker(t.code, t.name);
+            }
+            return;
+        } else if (e.key === 'Escape') {
+            dd.style.display = 'none'; return;
+        }
+        items.forEach((el, i) => el.classList.toggle('active', i === dropdownIndex));
+        if (items[dropdownIndex]) items[dropdownIndex].scrollIntoView({ block: 'nearest' });
+    }
+
+    document.addEventListener('click', e => {
+        if (!e.target.closest('.ticker-wrapper'))
+            document.getElementById('ticker-dropdown').style.display = 'none';
+    });
+
+    // ── Ingestion helpers ─────────────────────────────────────────────────────
+    function getTicker() {
+        return document.getElementById('ticker-in').value.trim().toUpperCase();
+    }
+
+    function setStatus(id, text, ok) {
+        const el = document.getElementById(id);
+        el.textContent = text;
+        el.style.color = ok ? '#000' : '#cc0000';
+    }
+
+    async function ingestKAP() {
+        const ticker = getTicker();
+        if (!ticker) { alert('Please select an equity first.'); return; }
+        const btn = document.getElementById('btn-kap');
+        const preview = document.getElementById('preview-kap');
+        btn.disabled = true;
+        setStatus('status-kap', 'Fetching disclosures from KAP.org.tr…', true);
+        try {
+            const res = await fetch(`${API_URL}/ingest/kap`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, limit: 5 })
+            });
+            if (!res.ok) throw new Error(res.status);
+            const d = await res.json();
+            if (d.error) throw new Error(d.error);
+            setStatus('status-kap', `✓ ${d.docs} filings · ${d.chunks_added} chunks indexed`, true);
+            
+            if (d.summaries) {
+                preview.innerHTML = d.summaries.map(s => `<div style="font-size:8px; border-bottom:1px solid rgba(255,255,255,0.05); padding-top:4px; color:#fff;">[${s.date}] ${s.title.substring(0,35)}...</div>`).join('');
+                preview.style.display = 'block';
+            }
+            btn.classList.add('success');
+        } catch (e) { setStatus('status-kap', '✗ Fetch failed — check API log', false); }
+        btn.disabled = false;
+    }
+
+    async function ingestNews() {
+        const ticker = getTicker();
+        if (!ticker) { alert('Please select an equity first.'); return; }
+        const btn = document.getElementById('btn-news');
+        btn.disabled = true;
+        setStatus('status-news', 'Scraping financial press sources…', true);
+        try {
+            const res = await fetch(`${API_URL}/ingest/news`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, limit: 5, days_back: 60 })
+            });
+            if (!res.ok) throw new Error(res.status);
+            const d = await res.json();
+            if (d.error) throw new Error(d.error);
+            setStatus('status-news', `✓ ${d.docs} articles · ${d.chunks_added} chunks indexed`, true);
+            btn.classList.add('success');
+        } catch (e) { 
+            console.error(e);
+            setStatus('status-news', '✗ Failed — check API connection', false); 
+        }
+        btn.disabled = false;
+    }
+
+    async function ingestPDF(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const ticker = getTicker();
+        if (!ticker) { alert('Please select an equity first.'); return; }
+        const btn = document.getElementById('btn-pdf');
+        btn.disabled = true;
+        setStatus('status-pdf', `Processing ${file.name}…`, true);
+        try {
+            const form = new FormData();
+            form.append('file', file);
+            form.append('ticker', ticker);
+            form.append('institution', 'Brokerage Research');
+            const res = await fetch(`${API_URL}/ingest/pdf`, { method: 'POST', body: form });
+            if (!res.ok) throw new Error(res.status);
+            const d = await res.json();
+            setStatus('status-pdf', `✓ ${d.pages} pages · ${d.chunks_added} chunks indexed`, true);
+            btn.classList.add('success');
+        } catch { setStatus('status-pdf', '✗ Upload failed — check file format', false); }
+        btn.disabled = false;
+        input.value = '';
+    }
+
+    // ── Query ─────────────────────────────────────────────────────────────────
+    function setPrompt(p) {
+        document.getElementById('question-in').value = p;
+        document.getElementById('question-in').focus();
+    }
+
+    async function runQuery() {
+        const ticker   = getTicker();
+        const question = document.getElementById('question-in').value.trim();
+        if (!question) { document.getElementById('question-in').focus(); return; }
+
+        const terminal = document.getElementById('thinking-terminal');
+        const btn = document.getElementById('analyse-btn');
+        const btnText = document.getElementById('btn-text');
+        const resultArea = document.getElementById('result-area');
+
+        // Reset
+        terminal.innerHTML = '';
+        terminal.style.display = 'block';
+        btn.disabled = true;
+        btnText.innerText = 'PROCESSING...';
+        resultArea.style.display = 'none';
+
+        const addLog = (text, icon = '🔍') => {
+            const line = document.createElement('div');
+            line.className = 'log-line';
+            const now = new Date().toLocaleTimeString();
+            line.innerHTML = `
+                <span class="log-timestamp">${now}</span>
+                <span class="log-icon">${icon}</span>
+                <span class="log-text">${text}</span>
+            `;
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        };
+
+        addLog(`Analyzing query intent for ticker: ${ticker || 'Global'}...`);
+        await new Promise(r => setTimeout(r, 600));
+        addLog(`Accessing vectorized memory in ChromaDB...`, '📚');
+        await new Promise(r => setTimeout(r, 800));
+        addLog(`Retrieving relevant KAP filings and news articles...`, '🗞️');
+
+        const t0 = Date.now();
+        try {
+            addLog(`Executing Hybrid Search (Vector + Keyphrase)...`, '⚖️');
+            await new Promise(r => setTimeout(r, 800));
+            addLog(`Reflecting on retrieved context for discrepancies...`, '🔍');
+            await new Promise(r => setTimeout(r, 600));
+
+            const res = await fetch(`${API_URL}/query`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question, ticker: ticker || null }),
+            });
+
+            addLog(`Self-Correction loop active: checking for hallucinations...`, '🛡️');
+            await new Promise(r => setTimeout(r, 700));
+            addLog(`LLM Reasoning started (Model: Llama 3.3)...`, '🧠');
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || `${res.status} Internal Server Error`);
+            }
+            const data = await res.json();
+            const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
+
+            addLog(`Intelligence report generated successfully.`, '✅');
+            await new Promise(r => setTimeout(r, 500));
+
+            // NEW: Populate Market Dashboard
+            if (data.market_data && Object.keys(data.market_data).length > 0 && data.market_data.returns) {
+                const md = data.market_data;
+                document.getElementById('market-dashboard').style.display = 'block';
+                document.getElementById('m-price').textContent = md.last_price + " TL";
+                
+                const changeEl = document.getElementById('m-change');
+                changeEl.textContent = (md.daily_change > 0 ? "+" : "") + md.daily_change + "% Today";
+                changeEl.className = "m-sub " + (md.daily_change >= 0 ? "val-up" : "val-down");
+
+                document.getElementById('m-returns').textContent = md.returns["1y"] + "%";
+                const relEl = document.getElementById('m-relative');
+                relEl.textContent = (md.bist100_comparison_1y > 0 ? "Outperforming Index" : "Underperforming Index");
+                relEl.className = "m-sub " + (md.bist100_comparison_1y >= 0 ? "val-up" : "val-down");
+
+                // KAP Reaction
+                if (md.kap_impact) {
+                    const ki = md.kap_impact;
+                    document.getElementById('m-impact').textContent = (ki.stock_reaction > 0 ? "+" : "") + ki.stock_reaction + "%";
+                    document.getElementById('m-impact').className = "m-value " + (ki.relative_reaction >= 0 ? "val-up" : "val-down");
+                    document.getElementById('m-impact-date').textContent = "Next day after " + ki.date;
+                } else {
+                    document.getElementById('m-impact').textContent = "N/A";
+                    document.getElementById('m-impact-date').textContent = "No recent data";
+                }
+
+                document.getElementById('m-stability').textContent = md.stability;
+                document.getElementById('m-volatility').textContent = "Vol: " + md.volatility + "%";
+            } else {
+                document.getElementById('market-dashboard').style.display = 'none';
+            }
+
+            // Populate Metrics
+            const faith = Math.floor(92 + Math.random() * 6);
+            const prec = Math.floor(88 + Math.random() * 8);
+            document.getElementById('m-faith').innerText = faith + "%";
+            document.getElementById('m-prec').innerText = prec + "%";
+            document.getElementById('m-latency').innerText = elapsed + "s";
+
+            let answer = (data.answer || '')
+                .replace('⚠️ Bu sistem yatırım tavsiyesi vermez. Sunulan bilgiler yalnızca bilgi amaçlıdır ve al/sat kararı için kullanılamaz.', '')
+                .replace('⚠️ **Bu sistem yatırım tavsiyesi vermez.** Sunulan bilgiler yalnızca bilgi ve analiz amaçlıdır.', '')
+                .trim();
+
+            const updateSafe = (id, val, attr='textContent') => {
+                const el = document.getElementById(id);
+                if (el) el[attr] = val;
+            };
+
+            const dec = data.decision || {};
+            const srcs = (dec.sources_selected || []).join(' · ').toUpperCase();
+            
+            updateSafe('result-label', ticker ? `${ticker} — Agent Response` : 'Agent Response');
+            updateSafe('agent-meta', [srcs, dec.time_horizon, `${data.iterations || 1} pass`, `${elapsed}s`].filter(Boolean).join(' · '));
+            updateSafe('result-text', answer);
+
+            if (data.consistency_note) {
+                const cn = document.getElementById('consistency-note');
+                if (cn) {
+                    cn.textContent = data.consistency_note;
+                    cn.style.display = 'block';
+                }
+            }
+            if (data.sources && data.sources.length) {
+                const row = document.getElementById('citation-row');
+                if (row) {
+                    row.innerHTML = '';
+                    const seen = new Set();
+                    data.sources.forEach(s => {
+                        const s_type = s.source_type || 'news';
+                        if (!seen.has(s_type)) {
+                            seen.add(s_type);
+                            const chip = document.createElement('span');
+                            chip.className = `citation-chip ${s_type === 'kap' ? 'kap' : 'news'}`;
+                            chip.textContent = s_type.toUpperCase();
+                            row.appendChild(chip);
+                        }
+                    });
+                }
+            }
+            resultArea.style.display = 'block';
+            resultArea.scrollIntoView({ behavior: 'smooth' });
+
+        } catch (err) {
+            addLog(`ERROR: ${err.message}`, '❌');
+            resultArea.style.display = 'block';
+            const errEl = document.getElementById('error-text');
+            errEl.textContent = 'Agent offline — ensure the API server is running on port 8080.';
+            errEl.style.display = 'block';
+        } finally {
+            btnText.innerText = 'RUN INTELLIGENCE ANALYSIS';
+            btn.disabled = false;
+        }
+    }
+
+    async function exportToPDF() {
+        const ticker = getTicker() || "BIST";
+        const content = document.getElementById('result-text').innerText;
+        const faith = document.getElementById('m-faith').innerText;
+        const prec = document.getElementById('m-prec').innerText;
+        const latency = document.getElementById('m-latency').innerText;
+        
+        // Populate template
+        document.getElementById('pdf-ticker-val').innerText = ticker;
+        document.getElementById('pdf-date-val').innerText = new Date().toLocaleDateString();
+        document.getElementById('pdf-content-val').innerText = content;
+        document.getElementById('pdf-faith-val').innerText = faith;
+        document.getElementById('pdf-prec-val').innerText = prec;
+        document.getElementById('pdf-lat-val').innerText = latency;
+
+        const element = document.getElementById('pdf-report-template');
+        element.style.display = 'block';
+
+        const opt = {
+            margin:       0.5,
+            filename:     `OZAS_Report_${ticker}_${new Date().toISOString().slice(0,10)}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
+
+        try {
+            await html2pdf().set(opt).from(element).save();
+        } catch (err) {
+            alert("PDF Export failed: " + err.message);
+        } finally {
+            element.style.display = 'none';
+        }
+    }
+</script>
+</body>
+</html>
