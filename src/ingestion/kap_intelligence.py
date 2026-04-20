@@ -116,13 +116,23 @@ def get_company_data(ticker: str) -> dict:
         # İstikrar skoru (0-100): düşük volatilite + pozitif getiri = daha yüksek skor
         stability_score = max(0, min(100, int(50 - volatility_1y + (ret_1y or 0) * 0.3)))
 
+        # Handle missing info gracefully
+        company_full_name = info.get("longName") or info.get("shortName") or ticker.upper()
+        sector = info.get("sector") or "-"
+        industry = info.get("industry") or "-"
+        mkt_cap = info.get("marketCap")
+        
+        # If info is completely missing, try to get at least the name from ticker
+        if not info and not hist_1y.empty:
+            logger.warning(f"Stock info is empty for {yf_ticker}, using history only.")
+
         return {
             "ticker":           ticker.upper(),
             "yf_ticker":        yf_ticker,
-            "company_name":     info.get("longName", ticker.upper()),
-            "sector":           info.get("sector", "Bilinmiyor"),
-            "industry":         info.get("industry", "Bilinmiyor"),
-            "market_cap":       info.get("marketCap"),
+            "company_name":     company_full_name,
+            "sector":           sector,
+            "industry":         industry,
+            "market_cap":       mkt_cap,
             "employees":        info.get("fullTimeEmployees"),
             "description":      info.get("longBusinessSummary", ""),
             "last_close":       last_close,
@@ -497,11 +507,23 @@ def generate_pdf_report(analysis: dict) -> bytes:
     import os
 
     # ── Font Kayıt (Playfair Display + Outfit) ────────────────────────────────
-    # _BASE: assets/fonts/ klasörünün mutlak yolu (hem local hem Render'da çalışır)
-    _BASE = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "assets", "fonts"
-    )
+    # _BASE: Try multiple locations to find fonts
+    possibilities = [
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "fonts"),
+        os.path.join(os.getcwd(), "assets", "fonts"),
+        os.path.join(os.getcwd(), "backend", "assets", "fonts"),
+        "/app/assets/fonts",
+        "./assets/fonts"
+    ]
+    _BASE = None
+    for p in possibilities:
+        if os.path.isdir(p):
+            _BASE = p
+            break
+    
+    if not _BASE:
+        logger.error("CRITICAL: Assets/fonts directory not found in any expected location.")
+        _BASE = "assets/fonts" # Fallback to relative
 
     def _reg(name, path):
         """TTF dosyasını ReportLab'a kaydeder. Başarılı ise True döner."""

@@ -10,20 +10,30 @@ class MarketDataFetcher:
         self.index_ticker = "XU100.IS"
 
     def get_summary(self, ticker: str) -> dict:
-        """Safe fetch with short timeouts for Render stability."""
+        """Safe fetch with long timeouts for Render stability."""
         try:
             t_symbol = f"{ticker.upper()}.IS"
-            # Fetch minimal data to speed up
-            data = yf.download([t_symbol, self.index_ticker], period="1y", interval="1d", progress=False, timeout=10)
+            # Fetch minimal data to speed up, using a longer timeout for Render
+            data = yf.download(
+                [t_symbol, self.index_ticker], 
+                period="1y", 
+                interval="1d", 
+                progress=False, 
+                timeout=30,
+                threads=True
+            )
             
-            if data.empty or t_symbol not in data["Close"]:
-                return {}
+            if data.empty or t_symbol not in data["Close"] or data["Close"][t_symbol].dropna().empty:
+                logger.warning(f"Yahoo Finance returned empty data for {t_symbol}")
+                return {
+                    "last_price": "N/A", "daily_change": 0, 
+                    "returns": {"1w": 0, "1m": 0, "1y": 0},
+                    "bist100_comparison_1y": 0, "avg_volume_6m": "0", "stability": "BİLİNMİYOR", "volatility": 0
+                }
 
             price_data = data["Close"][t_symbol].dropna()
             volume_data = data["Volume"][t_symbol].dropna()
             index_data = data["Close"][self.index_ticker].dropna()
-
-            if price_data.empty: return {}
 
             last_price = float(price_data.iloc[-1])
             prev_price = float(price_data.iloc[-2]) if len(price_data) > 1 else last_price
@@ -52,7 +62,11 @@ class MarketDataFetcher:
             }
         except Exception as e:
             logger.error(f"Market fetch crash: {e}")
-            return {}
+            return {
+                "last_price": "N/A", "daily_change": 0, 
+                "returns": {"1w": 0, "1m": 0, "1y": 0},
+                "bist100_comparison_1y": 0, "avg_volume_6m": "0", "stability": "BİLİNMİYOR", "volatility": 0
+            }
 
     def get_price_after_event(self, ticker: str, date_str: str) -> dict:
         try:

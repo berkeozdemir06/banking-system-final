@@ -137,19 +137,14 @@ async def get_status():
     }
 
 
-# ─── Intelligence Endpoints (KAP + Yahoo Finance) ─────────────────────────────
+# ─── Intelligence Endpoints (Analytical Dashboards) ───────────────────────────
 
 class IntelligenceReq(BaseModel):
     ticker:    str
     kap_limit: int = 15
 
-
 @router.post("/intelligence/analyze")
 async def intelligence_analyze(req: IntelligenceReq):
-    """
-    Google News RSS + Yahoo Finance üzerinden tam KAP + piyasa analizi.
-    Market Dashboard kartlarını doldurmak için kullanılır.
-    """
     try:
         from backend.agent.ingestion.kap_intelligence import full_analysis
         result = full_analysis(req.ticker.upper(), kap_limit=req.kap_limit)
@@ -160,19 +155,11 @@ async def intelligence_analyze(req: IntelligenceReq):
         logger.error(f"intelligence_analyze failed: {e}")
         raise HTTPException(500, f"Analiz hatası: {str(e)}")
 
-
 @router.get("/intelligence/report")
 async def intelligence_report(ticker: str = "ASELS", kap_limit: int = 15):
-    """
-    Tam analiz yapıp PDF rapor döner. agent.html'deki 'PDF Raporu İndir' butonuna bağlıdır.
-    """
     from fastapi.responses import StreamingResponse
     try:
         from backend.agent.ingestion.kap_intelligence import full_analysis, generate_pdf_report
-    except Exception as e:
-        raise HTTPException(500, f"Intelligence module not found: {e}")
-
-    try:
         result = full_analysis(ticker.upper(), kap_limit=kap_limit)
         pdf_bytes = generate_pdf_report(result)
         fname = f"OZAS_{ticker.upper()}_Report_{result['generated_at'][:10]}.pdf"
@@ -184,3 +171,57 @@ async def intelligence_report(ticker: str = "ASELS", kap_limit: int = 15):
     except Exception as e:
         logger.error(f"intelligence_report failed: {e}")
         raise HTTPException(500, f"Rapor hatası: {str(e)}")
+
+# ─── Ingestion Endpoints (Populating ChromaDB) ────────────────────────────────
+
+class IngestReq(BaseModel):
+    ticker: str
+    limit:  int = 15
+    days_back: int = 30
+
+@router.post("/ingest/kap")
+async def ingest_kap(req: IngestReq):
+    from backend.agent.ingestion.kap_scraper import KAPScraper
+    store = get_store()
+    try:
+        ks = KAPScraper()
+        docs = ks.scrape(req.ticker, limit=req.limit)
+        store.add_documents(docs)
+        return {"status": "success", "docs": len(docs), "chunks_added": len(docs)}
+    except Exception as e:
+        logger.error(f"KAP Ingest failed: {e}")
+        raise HTTPException(500, str(e))
+
+@router.post("/ingest/news")
+async def ingest_news(req: IngestReq):
+    from backend.agent.ingestion.news_scraper import NewsScraper
+    store = get_store()
+    try:
+        ns = NewsScraper()
+        docs = ns.fetch_news(req.ticker, limit=req.limit, days_back=req.days_back)
+        store.add_documents(docs)
+        return {"status": "success", "docs": len(docs), "chunks_added": len(docs)}
+    except Exception as e:
+        logger.error(f"News Ingest failed: {e}")
+        raise HTTPException(500, str(e))
+
+from fastapi import UploadFile, File, Form
+@router.post("/ingest/pdf")
+async def ingest_pdf(file: UploadFile = File(...), ticker: str = Form(...), institution: str = Form("Report")):
+    from backend.agent.ingestion.pdf_parser import BISTPDFParser
+    store = get_store()
+    try:
+        # Save temp file
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(await file.read())
+            tmp_path = tmp.name
+        
+        parser = BISTPDFParser()
+        docs = parser.parse(tmp_path, ticker=ticker, institution=institution)
+        store.add_documents(docs)
+        os.unlink(tmp_path)
+        return {"status": "success", "pages": 1, "chunks_added": len(docs)}
+    except Exception as e:
+        logger.error(f"PDF Ingest failed: {e}")
+        raise HTTPException(500, str(e))
