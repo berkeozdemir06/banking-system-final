@@ -428,17 +428,30 @@ def generate_pdf_report(analysis: dict) -> bytes:
     import os
 
     # ── Font Kayıt (Playfair Display + Outfit) ────────────────────────────────
-    _BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__)))), "assets", "fonts")
+    # _BASE: assets/fonts/ klasörünün mutlak yolu (hem local hem Render'da çalışır)
+    _BASE = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "assets", "fonts"
+    )
 
     def _reg(name, path):
-        if name not in pdfmetrics.getRegisteredFontNames():
-            try:
-                pdfmetrics.registerFont(TTFont(name, path))
-                return True
-            except Exception:
+        """TTF dosyasını ReportLab'a kaydeder. Başarılı ise True döner."""
+        if name in pdfmetrics.getRegisteredFontNames():
+            return True
+        try:
+            full_path = os.path.abspath(path)
+            if not os.path.isfile(full_path):
+                logger.warning(f"Font dosyası bulunamadı: {full_path}")
                 return False
-        return True
+            if os.path.getsize(full_path) < 1000:
+                logger.warning(f"Font dosyası çok küçük (bozuk olabilir): {full_path}")
+                return False
+            pdfmetrics.registerFont(TTFont(name, full_path))
+            logger.info(f"Font yüklendi: {name} ({os.path.getsize(full_path)//1024}KB)")
+            return True
+        except Exception as exc:
+            logger.warning(f"Font kaydedilemedi [{name}]: {exc}")
+            return False
 
     # Playfair Display – ÖZAS logo ve başlıklar
     pf_ok  = _reg("Playfair",     os.path.join(_BASE, "PlayfairDisplay.ttf"))
@@ -455,21 +468,13 @@ def generate_pdf_report(analysis: dict) -> bytes:
         addMapping("Outfit", 0, 0, "Outfit")
         addMapping("Outfit", 1, 0, "OutfitBold")
 
-    # Fallback: sisteme bak
-    if not pf_ok:
-        _reg("Playfair",     "/System/Library/Fonts/Supplemental/Arial.ttf")
-    if not pfb_ok:
-        _reg("PlayfairBold", "/System/Library/Fonts/Supplemental/Arial Bold.ttf")
-    if not ot_ok:
-        _reg("Outfit",       "/System/Library/Fonts/Supplemental/Arial Unicode.ttf")
-    if not otb_ok:
-        _reg("OutfitBold",   "/System/Library/Fonts/Supplemental/Arial Bold.ttf")
-
-    # Aktif font adları
+    # Aktif font adları (ReportLab built-in fallback — platformdan bağımsız)
     F_SERIF      = "Playfair"     if pf_ok  else "Times-Roman"
     F_SERIF_BOLD = "PlayfairBold" if pfb_ok else "Times-Bold"
     F_SANS       = "Outfit"       if ot_ok  else "Helvetica"
     F_SANS_BOLD  = "OutfitBold"   if otb_ok else "Helvetica-Bold"
+
+    logger.info(f"PDF Fontlar: SERIF={F_SERIF}/{F_SERIF_BOLD}  SANS={F_SANS}/{F_SANS_BOLD}")
 
     # ── Renk Paleti (ekrandaki beyaz premium tasarım) ─────────────────────────
     BLACK      = colors.HexColor("#000000")
