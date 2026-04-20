@@ -172,83 +172,152 @@ def _parse_rss_date(raw: str) -> Optional[datetime]:
     return None
 
 
+# ─────────────────────────────────────────────────────────────
+#  2. KAP Bildirimleri (Playwright Direct Scraping)
+# ─────────────────────────────────────────────────────────────
+
 def fetch_kap_announcements(ticker: str, limit: int = 15) -> list[dict]:
     """
-    Google News RSS üzerinden KAP bildirimlerini çeker.
-    Her bildirim için:
-      - title, date, url, content
-    Sonuçlar tarihe göre azalan sırada döner.
+    KAP üzerinden doğrudan bildirimleri çeker (Playwright kullanarak).
+    Adımlar:
+      1. kap.org.tr'ye gir
+      2. Arama kutusuna ticker yaz
+      3. Dropdown'dan şirketi seç
+      4. Bildirimler sekmesine git
+      5. Son 1 ay filtresini uygula
+      6. Verileri çek
     """
-    session = requests.Session()
-    session.headers.update(HEADERS)
-
-    queries = [
-        f'"{ticker.upper()}" KAP bildirimi site:kap.org.tr',
-        f'"{ticker.upper()}" KAP özel durum',
-        f'"{ticker.upper()}" KAP borsa bildirimi',
-        f'{ticker.upper()} KAP',
-    ]
-
-    seen_titles: set = set()
+    from playwright.sync_api import sync_playwright
+    
     docs: list[dict] = []
+    
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            # Use a slightly longer timeout and less strict wait condition
+            context = browser.new_context(user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+            page = context.new_page()
+            page.set_default_timeout(45000)
+            
+            logger.info(f"Navigating to KAP for {ticker}...")
+            page.goto('https://www.kap.org.tr/tr/', wait_until='domcontentloaded')
+            
+            # Step 1: Type ticker
+            # Using the #all-search ID found in previous analysis
+            page.fill('#all-search', ticker)
+            page.wait_for_timeout(2000)
+            
+            # Step 2: Select company from dropdown/results
+            # We try to click the first reasonable result matching the ticker
+            try:
+                # The dropdown results are in #searchDiv
+                company_selector = f'#searchDiv a:has-text("{ticker}")'
+                if page.locator(company_selector).count() > 0:
+                    page.click(company_selector)
+                else:
+                    page.keyboard.press('Enter')
+            except:
+                page.keyboard.press('Enter')
+            
+            page.wait_for_timeout(4000)
+            
+            # Step 3: Navigate to 'Bildirimler' tab
+            try:
+                # Look for the tab. It might be an <a> or <div>
+                page.click('a:has-text("Bildirimler")', timeout=10000)
+                page.wait_for_timeout(2000)
+            except:
+                logger.warning("Bildirimler tab not found via text match.")
 
-    for query in queries:
-        if len(docs) >= limit * 2:
-            break
-        try:
-            encoded = urllib.parse.quote(query)
-            url = f"https://news.google.com/rss/search?q={encoded}&hl=tr&gl=TR&ceid=TR:tr"
-            resp = session.get(url, timeout=12)
-            resp.raise_for_status()
-            root = ET.fromstring(resp.content)
-            items = root.findall("./channel/item")
+            # Step 4: Filter 'Son 1 ay' and search
+            try:
+                page.click('text="Son 1 ay"', timeout=10000)
+                page.wait_for_timeout(1000)
+                page.click('button:has-text("Ara")')
+                page.wait_for_timeout(3000)
+            except:
+                logger.warning("Filtering for 'Son 1 ay' failed.")
 
-            for item in items:
-                try:
-                    title_el = item.find("title")
-                    link_el  = item.find("link")
-                    pub_el   = item.find("pubDate")
-                    desc_el  = item.find("description")
-
-                    title   = title_el.text.strip() if title_el is not None and title_el.text else ""
-                    link    = link_el.text.strip()  if link_el  is not None and link_el.text  else ""
-                    pub_raw = pub_el.text.strip()   if pub_el   is not None and pub_el.text   else ""
-                    desc_raw = desc_el.text         if desc_el  is not None and desc_el.text  else ""
-
-                    if not title or title in seen_titles:
-                        continue
-                    seen_titles.add(title)
-
-                    desc_clean = re.sub(r"<[^>]+>", " ", desc_raw).strip()
-                    content = f"{title}. {desc_clean}" if desc_clean else title
-                    dt_obj  = _parse_rss_date(pub_raw)
-
+            # Step 5: Scrape Table
+            rows = page.locator('table tbody tr').all()
+            for row in rows:
+                if len(docs) >= limit:
+                    break
+                cells = row.locator('td').all_text_contents()
+                if len(cells) >= 6:
+                    # Tarih, Kod, Şirket, Tip, Konu, Özet Bilgi
+                    dt_str = cells[1].strip()
+                    # Parse date (Bugün HH:mm or DD.MM.YYYY HH:mm)
+                    dt_obj = _parse_kap_date(dt_str)
+                    
+                    link_el = row.locator('a').first
+                    url = "https://www.kap.org.tr" + link_el.get_attribute('href') if link_el.count() > 0 else ""
+                    
                     docs.append({
                         "ticker":   ticker.upper(),
-                        "title":    title,
-                        "content":  content[:3000],
-                        "url":      link,
-                        "date_str": dt_obj.strftime("%Y-%m-%d") if dt_obj else "Bilinmiyor",
+                        "title":    cells[5].strip(), # Konu
+                        "content":  cells[6].strip() if len(cells) > 6 else "", # Özet Bilgi
+                        "url":      url,
+                        "date_str": dt_obj.strftime("%Y-%m-%d") if dt_obj else dt_str,
                         "date_obj": dt_obj,
-                        "source":   "Google News RSS / KAP",
+                        "source":   "KAP Direct",
+                        "type":     cells[4].strip() # Tip (ÖDA, DG vb.)
                     })
-                except Exception:
-                    continue
-            time.sleep(0.4)
-        except Exception as e:
-            logger.warning(f"RSS fetch failed for query '{query}': {e}")
+            
+            browser.close()
+    except Exception as e:
+        logger.error(f"fetch_kap_announcements({ticker}) failed: {e}")
+        # In case of failure, we might want to fallback to RSS or return empty
+        return []
 
-    # DDG fallback
-    if len(docs) < 3:
-        docs.extend(_ddg_fallback(ticker, limit, seen_titles))
+    return docs
 
-    # Tarihe göre sırala (en yeni önce)
-    docs_with_date = [d for d in docs if d.get("date_obj")]
-    docs_no_date   = [d for d in docs if not d.get("date_obj")]
-    docs_with_date.sort(key=lambda x: x["date_obj"], reverse=True)
-    docs = docs_with_date + docs_no_date
+def _parse_kap_date(raw: str) -> Optional[datetime]:
+    """KAP tarih formatını (örn: 'Bugün 14:15' veya '15.04.2024 10:00') datetime'a çevirir."""
+    now = datetime.now()
+    if "Bugün" in raw:
+        try:
+            t_str = raw.replace("Bugün", "").strip()
+            return datetime.combine(now.date(), datetime.strptime(t_str, "%H:%M").time())
+        except: return now
+    if "Dün" in raw:
+        try:
+            t_str = raw.replace("Dün", "").strip()
+            return datetime.combine(now.date() - timedelta(days=1), datetime.strptime(t_str, "%H:%M").time())
+        except: return now - timedelta(days=1)
+    
+    for fmt in ["%d.%m.%Y %H:%M", "%d.%m.%Y"]:
+        try:
+            return datetime.strptime(raw.strip()[:16], fmt)
+        except: continue
+    return None
 
-    return docs[:limit]
+
+# ─────────────────────────────────────────────────────────────
+#  6. AI Commentary (ÖZAS Agent Yorumu)
+# ─────────────────────────────────────────────────────────────
+
+def generate_agent_commentary(announcement: dict, price_impact: Optional[float] = None) -> str:
+    """
+    KAP bildirimine binaen 'ÖZAS Agent' yorumu üretir.
+    Gerçek uygulamada bir LLM (Gemini/OpenAI) çağrısı yapılır.
+    """
+    title = announcement.get('title', '')
+    content = announcement.get('content', '')
+    impact = f"Bu bildirim sonrası hisse fiyatı %{price_impact:+.2f} değişim gösterdi." if price_impact is not None else "Fiyat verisi henüz işlenmedi."
+    
+    # Simple logic-based commentary generation if no LLM
+    comment = ""
+    if "Kar Payı" in title or "Temettü" in title:
+        comment = "Şirketin nakit temettü dağıtım kararı hissedar bağlılığı açısından pozitif bir sinyaldir. Dağıtım oranı sektör ortalamalarıyla kıyaslanmalıdır."
+    elif "İhale" in title or "Yeni İş İlişkisi" in title:
+        comment = "Yeni alınan iş/ihale, şirketin iş hacmini ve gelecekteki nakit akışlarını doğrudan olumlu etkileyecektir. Operasyonel karlılık üzerindeki marj etkisi takip edilmelidir."
+    elif "Kredi" in title or "Borçlanma" in title:
+        comment = "Borçlanma araçları ihracı veya kredi kullanımı, şirketin finansman yapısını ve likidite yönetimini etkiler. Borç/Özsermaye rasyosu kritik öneme sahiptir."
+    else:
+        comment = f"Bu bildirim, şirketin genel operasyonel akışını ve şeffaflık ilkelerini yansıtmaktadır. Yatırımcıların bildirim içeriğindeki detaylara (eklere) odaklanması önerilir."
+
+    return f"{comment} {impact}"
 
 
 def _ddg_fallback(ticker: str, limit: int, seen_titles: set) -> list[dict]:
@@ -419,105 +488,178 @@ def generate_pdf_report(analysis: dict) -> bytes:
     from reportlab.lib import colors
     from reportlab.platypus import (
         SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-        HRFlowable, KeepTogether
+        HRFlowable, KeepTogether, Frame, PageTemplate
     )
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.lib.fonts import addMapping
+    import os
 
-    # Türkçe karakter desteği için Arial Unicode
-    _ARIAL_UNICODE = "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"
-    _ARIAL_BOLD    = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
-    _FONT_REGULAR  = "ArialUnicode"
-    _FONT_BOLD     = "ArialUnicodeBold"
-    try:
-        if _FONT_REGULAR not in pdfmetrics.getRegisteredFontNames():
-            pdfmetrics.registerFont(TTFont(_FONT_REGULAR, _ARIAL_UNICODE))
-        if _FONT_BOLD not in pdfmetrics.getRegisteredFontNames():
-            pdfmetrics.registerFont(TTFont(_FONT_BOLD, _ARIAL_BOLD))
-    except Exception:
-        _FONT_REGULAR = "Helvetica"
-        _FONT_BOLD    = "Helvetica-Bold"
+    # ── Font Kayıt (Playfair Display + Outfit) ────────────────────────────────
+    # _BASE: assets/fonts/ klasörünün mutlak yolu (hem local hem Render'da çalışır)
+    _BASE = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "assets", "fonts"
+    )
 
+    def _reg(name, path):
+        """TTF dosyasını ReportLab'a kaydeder. Başarılı ise True döner."""
+        if name in pdfmetrics.getRegisteredFontNames():
+            return True
+        try:
+            full_path = os.path.abspath(path)
+            if not os.path.isfile(full_path):
+                logger.warning(f"Font dosyası bulunamadı: {full_path}")
+                return False
+            if os.path.getsize(full_path) < 1000:
+                logger.warning(f"Font dosyası çok küçük (bozuk olabilir): {full_path}")
+                return False
+            pdfmetrics.registerFont(TTFont(name, full_path))
+            logger.info(f"Font yüklendi: {name} ({os.path.getsize(full_path)//1024}KB)")
+            return True
+        except Exception as exc:
+            logger.warning(f"Font kaydedilemedi [{name}]: {exc}")
+            return False
+
+    # Playfair Display – ÖZAS logo ve başlıklar
+    pf_ok  = _reg("Playfair",     os.path.join(_BASE, "PlayfairDisplay.ttf"))
+    pfb_ok = _reg("PlayfairBold", os.path.join(_BASE, "PlayfairDisplay-Bold.ttf"))
+    # Outfit – body, tablolar, meta
+    ot_ok  = _reg("Outfit",       os.path.join(_BASE, "Outfit.ttf"))
+    otb_ok = _reg("OutfitBold",   os.path.join(_BASE, "Outfit-Bold.ttf"))
+
+    if pf_ok and pfb_ok:
+        addMapping("Playfair", 0, 0, "Playfair")
+        addMapping("Playfair", 1, 0, "PlayfairBold")
+
+    if ot_ok and otb_ok:
+        addMapping("Outfit", 0, 0, "Outfit")
+        addMapping("Outfit", 1, 0, "OutfitBold")
+
+    # Aktif font adları (ReportLab built-in fallback — platformdan bağımsız)
+    F_SERIF      = "Playfair"     if pf_ok  else "Times-Roman"
+    F_SERIF_BOLD = "PlayfairBold" if pfb_ok else "Times-Bold"
+    F_SANS       = "Outfit"       if ot_ok  else "Helvetica"
+    F_SANS_BOLD  = "OutfitBold"   if otb_ok else "Helvetica-Bold"
+
+    logger.info(f"PDF Fontlar: SERIF={F_SERIF}/{F_SERIF_BOLD}  SANS={F_SANS}/{F_SANS_BOLD}")
+
+    # ── Renk Paleti (ekrandaki beyaz premium tasarım) ─────────────────────────
+    BLACK      = colors.HexColor("#000000")
+    DARK       = colors.HexColor("#111111")
+    MID        = colors.HexColor("#333333")
+    MUTED      = colors.HexColor("#777777")
+    VERY_MUTED = colors.HexColor("#aaaaaa")
+    LIGHT_LINE = colors.HexColor("#e0e0e0")
+    LIGHT_BG   = colors.HexColor("#f8f8f8")
+    GOLD_ACC   = colors.HexColor("#937d65")   # logo alt yazı altın tonu
+    GREEN      = colors.HexColor("#1a7a3c")
+    RED        = colors.HexColor("#b91c1c")
+    WHITE      = colors.white
+    BLUE       = colors.HexColor("#1d4ed8")
+
+    # ── Sayfa Yapısı ──────────────────────────────────────────────────────────
     buf = BytesIO()
     doc = SimpleDocTemplate(
         buf,
         pagesize=A4,
-        leftMargin=2*cm,
-        rightMargin=2*cm,
+        leftMargin=2.2*cm,
+        rightMargin=2.2*cm,
         topMargin=2*cm,
         bottomMargin=2*cm,
     )
+    W = A4[0] - 4.4*cm   # kullanılabilir genişlik
 
-    # ── Renkler
-    DARK_BG    = colors.HexColor("#0a0f1e")
-    GOLD       = colors.HexColor("#f5c842")
-    GOLD_LIGHT = colors.HexColor("#fde68a")
-    MUTED      = colors.HexColor("#64748b")
-    GREEN      = colors.HexColor("#22c55e")
-    RED        = colors.HexColor("#ef4444")
-    BLUE       = colors.HexColor("#3b82f6")
-    WHITE      = colors.white
-    LIGHT_GREY = colors.HexColor("#1e293b")
-    TEXT_GREY  = colors.HexColor("#cbd5e1")
+    # ── Stil Tanımları ────────────────────────────────────────────────────────
+    def P(name, **kw):
+        return ParagraphStyle(name, **kw)
 
-    # ── Stiller
-    styles = getSampleStyleSheet()
+    # ÖZAS büyük logosu (Playfair Display, Bold)
+    s_logo = P("Logo",
+        fontName=F_SERIF_BOLD, fontSize=28,
+        textColor=BLACK, leading=30, spaceAfter=0)
 
-    def make_style(name, **kwargs):
-        return ParagraphStyle(name, **kwargs)
+    # "EQUITY INTELLIGENCE REPORT" — küçük spaced üst yazı
+    s_sub_logo = P("SubLogo",
+        fontName=F_SANS, fontSize=9,
+        textColor=GOLD_ACC, letterSpacing=2.5,
+        alignment=TA_LEFT, spaceAfter=2)
 
-    s_title = make_style("Title",
-        fontName=_FONT_BOLD, fontSize=22,
-        textColor=GOLD, alignment=TA_CENTER, spaceAfter=4)
+    # Bölüm başlıkları (Summary Analysis, Performance vs.)
+    s_section = P("Section",
+        fontName=F_SANS_BOLD, fontSize=10,
+        textColor=BLACK, letterSpacing=1.5,
+        spaceBefore=18, spaceAfter=8,
+        textTransform="uppercase" if hasattr(ParagraphStyle, 'textTransform') else None)
 
-    s_subtitle = make_style("Sub",
-        fontName=_FONT_REGULAR, fontSize=10,
-        textColor=MUTED, alignment=TA_CENTER, spaceAfter=12)
+    # Tablo başlık etiketi
+    s_label = P("Label",
+        fontName=F_SANS, fontSize=8,
+        textColor=MUTED, letterSpacing=1.2,
+        spaceBefore=14, spaceAfter=4)
 
-    s_section = make_style("Section",
-        fontName=_FONT_BOLD, fontSize=13,
-        textColor=GOLD, spaceBefore=16, spaceAfter=8)
+    # Body metin
+    s_body = P("Body",
+        fontName=F_SANS, fontSize=10,
+        textColor=MID, leading=16, spaceAfter=4)
 
-    s_body = make_style("Body",
-        fontName=_FONT_REGULAR, fontSize=9,
-        textColor=TEXT_GREY, leading=14)
+    # Küçük açıklama
+    s_small = P("Small",
+        fontName=F_SANS, fontSize=8.5,
+        textColor=MUTED, leading=13)
 
-    s_small = make_style("Small",
-        fontName=_FONT_REGULAR, fontSize=8,
+    # Duyuru başlığı (Türkçe karakterlerin hatasız çıkması için Outfit Bold kullanıyoruz)
+    s_ann_title = P("AnnTitle",
+        fontName=F_SANS_BOLD, fontSize=10,
+        textColor=DARK, leading=14, spaceAfter=2)
+
+    # Duyuru meta (tarih, kaynak)
+    s_ann_meta = P("AnnMeta",
+        fontName=F_SANS, fontSize=8,
         textColor=MUTED, leading=12)
 
-    s_bold = make_style("Bold",
-        fontName=_FONT_BOLD, fontSize=9,
-        textColor=TEXT_GREY)
+    # Fiyat etkisi satırı
+    s_impact = P("Impact",
+        fontName=F_SANS_BOLD, fontSize=9,
+        textColor=MID, leading=13, spaceAfter=4)
 
-    s_ann_title = make_style("AnnTitle",
-        fontName=_FONT_BOLD, fontSize=9,
-        textColor=WHITE, leading=13)
+    # Sağ hizalı (ticker, tarih)
+    s_right = P("Right",
+        fontName=F_SANS, fontSize=9,
+        textColor=MID, alignment=TA_RIGHT)
 
-    s_ann_meta = make_style("AnnMeta",
-        fontName=_FONT_REGULAR, fontSize=8,
-        textColor=MUTED, leading=12)
+    # Disclaimer
+    s_disclaimer = P("Disc",
+        fontName=F_SANS, fontSize=8,
+        textColor=VERY_MUTED, leading=12)
 
-    def divider():
-        return HRFlowable(width="100%", thickness=0.5,
-                          color=colors.HexColor("#1e3a5f"), spaceAfter=8)
+    def divider(thick=0.5, color=LIGHT_LINE, before=6, after=8):
+        return HRFlowable(width="100%", thickness=thick,
+                          color=color, spaceAfter=after, spaceBefore=before)
 
-    # ── Veri
+    def section_title(text):
+        # Büyük harf + ince çizgi
+        return [
+            Spacer(1, 4),
+            Paragraph(f"<b>{text.upper()}</b>", s_section),
+            divider(thick=0.5, color=LIGHT_LINE, before=0, after=6),
+        ]
+
+    # ── Veri ──────────────────────────────────────────────────────────────────
     company = analysis.get("company", {})
     tk      = analysis.get("ticker", "?")
     anns    = analysis.get("announcements", [])
     gen_at  = analysis.get("generated_at", "")[:10]
 
+    def fmt_pct(v, plain=False):
+        if v is None: return "N/A"
+        sign = "+" if v >= 0 else ""
+        return f"{sign}{v:.2f}%"
+
     def fmt_price(v):
         if v is None: return "N/A"
         return f"{v:,.2f} TL"
-
-    def fmt_pct(v, arrow=True):
-        if v is None: return "N/A"
-        sign = "▲" if v >= 0 else "▼"
-        color_tag = "#22c55e" if v >= 0 else "#ef4444"
-        return f'<font color="{color_tag}">{sign if arrow else ""} %{abs(v):.2f}</font>'
 
     def fmt_vol(v):
         if v is None: return "N/A"
@@ -528,297 +670,308 @@ def generate_pdf_report(analysis: dict) -> bytes:
 
     story = []
 
-    # ═══════════════════════════════════════
-    # BÖLÜM 1: Başlık
-    # ═══════════════════════════════════════
-    story.append(Paragraph(f"ÖZAS Finance Agent", s_title))
-    story.append(Paragraph(
-        f"BIST Equity Intelligence Report · {company.get('company_name', tk)} ({tk}) · {gen_at}",
-        s_subtitle))
-    story.append(Spacer(1, 4))
-    story.append(divider())
-
-    # ═══════════════════════════════════════
-    # BÖLÜM 2: Şirket Özeti
-    # ═══════════════════════════════════════
-    story.append(Paragraph("📊 Şirket Özeti", s_section))
-
-    # Bilgi tablosu
-    info_data = [
-        ["Alan", "Değer"],
-        ["Şirket Adı",    company.get("company_name", "–")],
-        ["Sektör",        company.get("sector", "–")],
-        ["Endüstri",      company.get("industry", "–")],
-        ["Piyasa Değeri", fmt_vol(company.get("market_cap"))],
-        ["Çalışan Sayısı", str(company.get("employees") or "–")],
-    ]
-    info_table = Table(info_data, colWidths=[4.5*cm, 12*cm])
-    info_table.setStyle(TableStyle([
-        ("BACKGROUND",  (0,0), (-1,0), LIGHT_GREY),
-        ("TEXTCOLOR",   (0,0), (-1,0), GOLD),
-        ("FONTNAME",    (0,0), (-1,0), _FONT_BOLD),
-        ("FONTSIZE",    (0,0), (-1,-1), 9),
-        ("FONTNAME",    (0,1), (0,-1), _FONT_BOLD),
-        ("TEXTCOLOR",   (0,1), (0,-1), TEXT_GREY),
-        ("TEXTCOLOR",   (1,1), (1,-1), TEXT_GREY),
-        ("BACKGROUND",  (0,1), (-1,-1), colors.HexColor("#0f172a")),
-        ("ROWBACKGROUNDS", (0,1), (-1,-1),
-         [colors.HexColor("#0f172a"), colors.HexColor("#111827")]),
-        ("GRID",        (0,0), (-1,-1), 0.25, colors.HexColor("#1e3a5f")),
-        ("VALIGN",      (0,0), (-1,-1), "MIDDLE"),
-        ("TOPPADDING",  (0,0), (-1,-1), 6),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-        ("LEFTPADDING", (0,0), (-1,-1), 10),
+    # ═══════════════════════════════════════════════════════════════════════════
+    # HEADER — ÖZAS / Equity Intelligence Report / Ticker / Date
+    # ═══════════════════════════════════════════════════════════════════════════
+    hdr_data = [[
+        [
+            Paragraph("ÖZAS", s_logo),
+            Paragraph("EQUITY INTELLIGENCE REPORT", s_sub_logo),
+        ],
+        [
+            Paragraph(f"<b>{tk}</b>", P("TKR", fontName=F_SERIF_BOLD, fontSize=12,
+                       textColor=BLACK, alignment=TA_RIGHT)),
+            Paragraph(gen_at, P("DT", fontName=F_SANS, fontSize=9,
+                       textColor=MUTED, alignment=TA_RIGHT)),
+        ]
+    ]]
+    hdr_table = Table(hdr_data, colWidths=[W*0.65, W*0.35])
+    hdr_table.setStyle(TableStyle([
+        ("VALIGN",  (0,0), (-1,-1), "BOTTOM"),
+        ("LEFTPADDING",  (0,0), (0,0), 0),
+        ("RIGHTPADDING", (1,0), (1,0), 0),
+        ("TOPPADDING",   (0,0), (-1,-1), 0),
+        ("BOTTOMPADDING",(0,0), (-1,-1), 0),
     ]))
-    story.append(info_table)
-    story.append(Spacer(1, 12))
+    story.append(hdr_table)
+    story.append(Spacer(1, 8))
+    story.append(divider(thick=1.2, color=BLACK, before=0, after=16))
 
-    # Açıklama
+    # ═══════════════════════════════════════════════════════════════════════════
+    # BÖLÜM 1 — Şirket Özeti
+    # ═══════════════════════════════════════════════════════════════════════════
+    story += section_title("Summary Analysis")
+
+    # Şirket bilgi tablosu
+    co_name = company.get("company_name", tk)
+    sector  = company.get("sector", "–")
+    ind     = company.get("industry", "–")
+    mktcap  = fmt_vol(company.get("market_cap"))
+    emps    = str(company.get("employees") or "–")
+
+    info_rows = [
+        ["Company", co_name],
+        ["Sector",  sector],
+        ["Industry", ind],
+        ["Market Cap", mktcap],
+        ["Employees", emps],
+    ]
+    info_t = Table(info_rows, colWidths=[3.5*cm, W - 3.5*cm])
+    info_t.setStyle(TableStyle([
+        ("FONTNAME",  (0,0), (0,-1), F_SANS_BOLD),
+        ("FONTNAME",  (1,0), (1,-1), F_SANS),
+        ("FONTSIZE",  (0,0), (-1,-1), 9),
+        ("TEXTCOLOR", (0,0), (0,-1), MUTED),
+        ("TEXTCOLOR", (1,0), (1,-1), DARK),
+        ("TOPPADDING", (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("LINEBELOW", (0,-1), (-1,-1), 0.3, LIGHT_LINE),
+        ("LEFTPADDING", (0,0), (-1,-1), 0),
+    ]))
+    story.append(info_t)
+
     desc = company.get("description", "")
     if desc:
-        story.append(Paragraph(desc[:600] + ("..." if len(desc) > 600 else ""), s_small))
         story.append(Spacer(1, 10))
+        story.append(Paragraph(desc[:500] + ("..." if len(desc) > 500 else ""), s_small))
 
-    # ═══════════════════════════════════════
-    # BÖLÜM 3: Sayısal Performans
-    # ═══════════════════════════════════════
-    story.append(divider())
-    story.append(Paragraph("📈 Fiyat & Performans", s_section))
+    # ═══════════════════════════════════════════════════════════════════════════
+    # BÖLÜM 2 — Performance Metrics (tablo)
+    # ═══════════════════════════════════════════════════════════════════════════
+    story += section_title("Performance Metrics")
 
-    perf_data = [
-        ["Metrik", "Değer", "Yorum"],
-        ["Son Kapanış",          fmt_price(company.get("last_close")),  ""],
-        ["Günlük Değişim",       fmt_pct(company.get("day_change_pct")), ""],
-        ["1 Haftalık Getiri",    fmt_pct(company.get("ret_1w")),    ""],
-        ["1 Aylık Getiri",       fmt_pct(company.get("ret_1mo")),   ""],
-        ["1 Yıllık Getiri",      fmt_pct(company.get("ret_1y")),    ""],
-        ["BIST100 1Y Getirisi",  fmt_pct(company.get("bist_ret_1y")), "BIST 100 Endeksi"],
-        ["Hisse vs BIST100 (1Y)", fmt_pct(company.get("vs_bist_1y")), "Fazla / Eksik Getiri"],
-        ["52H En Yüksek",        fmt_price(company.get("high_52w")), ""],
-        ["52H En Düşük",         fmt_price(company.get("low_52w")),  ""],
-        ["Yıllık Volatilite",    f"%{company.get('volatility_1y', '?')}", "Std.Dev. × √252"],
-        ["İstikrar Skoru",       f"{company.get('stability_score', '?')}/100", "Ajan değerlendirmesi"],
+    lc   = company.get("last_close")
+    dc   = company.get("day_change_pct")
+    r1w  = company.get("ret_1w")
+    r1m  = company.get("ret_1mo")
+    r1y  = company.get("ret_1y")
+    bist = company.get("bist_ret_1y")
+    vs   = company.get("vs_bist_1y")
+    h52  = company.get("high_52w")
+    l52  = company.get("low_52w")
+    vol  = company.get("volatility_1y")
+    stab = company.get("stability_score")
+
+    def colored_pct(v):
+        if v is None: return "N/A"
+        sign = "+" if v >= 0 else ""
+        col = "#1a7a3c" if v >= 0 else "#b91c1c"
+        return Paragraph(f'<font color="{col}"><b>{sign}{v:.2f}%</b></font>', P("Pct", fontName=F_SANS, fontSize=9, leading=10))
+
+    perf_rows = [
+        ["Last Close",          fmt_price(lc),                ""],
+        ["Daily Change",        colored_pct(dc),              "Today"],
+        ["1-Week Return",       colored_pct(r1w),             ""],
+        ["1-Month Return",      colored_pct(r1m),             ""],
+        ["1-Year Return",       colored_pct(r1y),             ""],
+        ["BIST100 1Y",          colored_pct(bist),            "Benchmark"],
+        ["vs. BIST100 (1Y)",    colored_pct(vs),              "Alpha"],
+        ["52W High",            fmt_price(h52),               ""],
+        ["52W Low",             fmt_price(l52),               ""],
+        ["Annual Volatility",   f"{vol:.1f}%" if vol else "N/A", "Std.Dev × √252"],
+        ["Stability Score",     f"{stab}/100" if stab else "N/A", "Agent Assessment"],
     ]
 
-    perf_table = Table(perf_data, colWidths=[5*cm, 4*cm, 7.5*cm])
-    perf_table.setStyle(TableStyle([
-        ("BACKGROUND",   (0,0), (-1,0), LIGHT_GREY),
-        ("TEXTCOLOR",    (0,0), (-1,0), GOLD),
-        ("FONTNAME",     (0,0), (-1,0), _FONT_BOLD),
-        ("FONTSIZE",     (0,0), (-1,-1), 9),
-        ("FONTNAME",     (0,1), (0,-1), _FONT_BOLD),
-        ("TEXTCOLOR",    (0,1), (0,-1), TEXT_GREY),
-        ("TEXTCOLOR",    (1,1), (1,-1), TEXT_GREY),
-        ("TEXTCOLOR",    (2,1), (2,-1), MUTED),
-        ("ROWBACKGROUNDS", (0,1), (-1,-1),
-         [colors.HexColor("#0f172a"), colors.HexColor("#111827")]),
-        ("GRID",         (0,0), (-1,-1), 0.25, colors.HexColor("#1e3a5f")),
-        ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
-        ("TOPPADDING",   (0,0), (-1,-1), 6),
-        ("BOTTOMPADDING",(0,0), (-1,-1), 6),
-        ("LEFTPADDING",  (0,0), (-1,-1), 10),
-        ("FONTSIZE",     (2,1), (2,-1), 8),
+    perf_t = Table(perf_rows, colWidths=[4*cm, 3.5*cm, W - 7.5*cm])
+    perf_t.setStyle(TableStyle([
+        ("FONTNAME",   (0,0), (0,-1), F_SANS_BOLD),
+        ("FONTNAME",   (1,0), (-1,-1), F_SANS),
+        ("FONTSIZE",   (0,0), (-1,-1), 9),
+        ("TEXTCOLOR",  (0,0), (0,-1), MUTED),
+        ("TEXTCOLOR",  (2,0), (2,-1), VERY_MUTED),
+        ("ROWBACKGROUNDS", (0,0), (-1,-1), [WHITE, LIGHT_BG]),
+        ("TOPPADDING", (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING", (0,0), (-1,-1), 0),
+        ("LINEBELOW", (0,-1), (-1,-1), 0.5, LIGHT_LINE),
     ]))
-    story.append(perf_table)
+    story.append(perf_t)
 
-    # BIST100 karşılaştırma yorumu
-    vs = company.get("vs_bist_1y")
-    ret_1y = company.get("ret_1y")
-    bist_ret = company.get("bist_ret_1y")
-    if vs is not None and ret_1y is not None and bist_ret is not None:
+    # Yorum satırı
+    if vs is not None and r1y is not None and bist is not None:
         if vs > 5:
-            verdict = f"{tk} son 1 yılda BIST100'ü %{abs(vs):.1f} outperform etti. Piyasanın üzerinde güçlü bir performans sergiledi."
+            verdict = f"{tk} outperformed BIST100 by {vs:.1f}% over the past year — strong alpha generation."
         elif vs < -5:
-            verdict = f"{tk} son 1 yılda BIST100'ün %{abs(vs):.1f} gerisinde kaldı. Endeks düştüğünde hisse daha sert düştü / yükselişi takip edemedi."
+            verdict = f"{tk} underperformed BIST100 by {abs(vs):.1f}% — lagged the index materially."
         else:
-            verdict = f"{tk} son 1 yılda BIST100 ile benzer performans gösterdi (%{vs:+.1f} fark)."
+            verdict = f"{tk} tracked BIST100 closely with a {vs:+.1f}% differential over 12 months."
         story.append(Spacer(1, 8))
-        story.append(Paragraph(f"🔍 Ajan Yorumu: {verdict}", s_small))
+        story.append(Paragraph(f"<i>Agent view: {verdict}</i>", s_small))
 
-    # ═══════════════════════════════════════
-    # BÖLÜM 4: 1 Yıllık İstikrar Analizi
-    # ═══════════════════════════════════════
-    story.append(Spacer(1, 12))
-    story.append(divider())
-    story.append(Paragraph("🤖 1 Yıllık Geçmiş — Ajan İstikrar Analizi", s_section))
-
+    # ═══════════════════════════════════════════════════════════════════════════
+    # BÖLÜM 3 — Stability Analysis
+    # ═══════════════════════════════════════════════════════════════════════════
+    story += section_title("Stability & Risk Analysis")
     ph = company.get("price_history_1y", [])
-    stability = company.get("stability_score", 50)
-    vol       = company.get("volatility_1y", 0)
-    ret_1y    = company.get("ret_1y")
-
-    analysis_text = _stability_analysis(tk, stability, vol, ret_1y, ph)
+    analysis_text = _stability_analysis(tk, stab or 50, vol or 0, r1y, ph)
     story.append(Paragraph(analysis_text, s_body))
 
-    # ═══════════════════════════════════════
-    # BÖLÜM 5: 6 Aylık Hacim Özeti
-    # ═══════════════════════════════════════
-    story.append(Spacer(1, 12))
-    story.append(divider())
-    story.append(Paragraph("📦 6 Aylık Hacim & Fiyat Özeti", s_section))
-
+    # ═══════════════════════════════════════════════════════════════════════════
+    # BÖLÜM 4 — 6 Aylık Hacim Özeti
+    # ═══════════════════════════════════════════════════════════════════════════
     vol_data = company.get("volume_data", [])
     if vol_data:
-        monthly_summary = _monthly_volume_summary(vol_data)
-        monthly_table_data = [["Ay", "Ort. Günlük Hacim", "Ort. Kapanış"]]
-        for row in monthly_summary:
-            monthly_table_data.append([
-                row["month_label"],
-                fmt_vol(row["avg_volume"]),
-                fmt_price(row["avg_close"]),
-            ])
+        story += section_title("6-Month Volume Summary")
+        monthly = _monthly_volume_summary(vol_data)
+        mv_rows = [["Month", "Avg Daily Volume", "Avg Close"]]
+        for row in monthly:
+            mv_rows.append([row["month_label"], fmt_vol(row["avg_volume"]), fmt_price(row["avg_close"])])
 
-        monthly_table = Table(monthly_table_data, colWidths=[4*cm, 5*cm, 5*cm])
-        monthly_table.setStyle(TableStyle([
-            ("BACKGROUND",   (0,0), (-1,0), LIGHT_GREY),
-            ("TEXTCOLOR",    (0,0), (-1,0), GOLD),
-            ("FONTNAME",     (0,0), (-1,0), _FONT_BOLD),
-            ("FONTSIZE",     (0,0), (-1,-1), 9),
-            ("TEXTCOLOR",    (0,1), (-1,-1), TEXT_GREY),
-            ("ROWBACKGROUNDS", (0,1), (-1,-1),
-             [colors.HexColor("#0f172a"), colors.HexColor("#111827")]),
-            ("GRID",         (0,0), (-1,-1), 0.25, colors.HexColor("#1e3a5f")),
-            ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
-            ("TOPPADDING",   (0,0), (-1,-1), 6),
-            ("BOTTOMPADDING",(0,0), (-1,-1), 6),
-            ("LEFTPADDING",  (0,0), (-1,-1), 10),
+        mv_t = Table(mv_rows, colWidths=[4*cm, 4.5*cm, 4.5*cm])
+        mv_t.setStyle(TableStyle([
+            ("FONTNAME",   (0,0), (-1,0), F_SANS_BOLD),
+            ("FONTNAME",   (0,1), (-1,-1), F_SANS),
+            ("FONTSIZE",   (0,0), (-1,-1), 9),
+            ("TEXTCOLOR",  (0,0), (-1,0), MUTED),
+            ("TEXTCOLOR",  (0,1), (-1,-1), DARK),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [WHITE, LIGHT_BG]),
+            ("LINEBELOW",  (0,0), (-1,0), 0.5, LIGHT_LINE),
+            ("LINEBELOW",  (0,-1), (-1,-1), 0.5, LIGHT_LINE),
+            ("TOPPADDING", (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+            ("LEFTPADDING", (0,0), (-1,-1), 0),
         ]))
-        story.append(monthly_table)
+        story.append(mv_t)
 
-    # ═══════════════════════════════════════
-    # BÖLÜM 6: KAP Duyuruları + Fiyat Etkisi
-    # ═══════════════════════════════════════
-    story.append(Spacer(1, 12))
-    story.append(divider())
-    story.append(Paragraph(
-        f"📢 Son {len(anns)} KAP Duyurusu — Ertesi Gün Fiyat Etkisi",
-        s_section))
+    # ═══════════════════════════════════════════════════════════════════════════
+    # BÖLÜM 5 — KAP Duyuruları Özet Tablo
+    # ═══════════════════════════════════════════════════════════════════════════
+    story += section_title(f"KAP Disclosures — Next-Day Price Reaction ({len(anns)} events)")
 
     if not anns:
-        story.append(Paragraph("KAP verisi alınamadı.", s_body))
+        story.append(Paragraph("No KAP disclosure data available.", s_body))
     else:
-        ann_table_data = [["#", "Tarih", "Başlık", "Duy. Günü", "Ertesi Gün", "Değişim", "BIST100"]]
-
+        kap_rows = [["#", "Date", "Headline", "T+0", "T+1", "Change", "BIST100"]]
         for i, ann in enumerate(anns[:15], 1):
-            title_short = ann.get("title", "?")[:55] + ("…" if len(ann.get("title","")) > 55 else "")
-            date_str    = ann.get("date_str", "?")[:10]
-            p0          = ann.get("price_day0")
-            p1          = ann.get("price_day1")
-            chg_pct     = ann.get("price_change_pct")
-            bist_pct    = ann.get("bist_change_pct")
+            title_s  = ann.get("title", "?")[:52] + ("…" if len(ann.get("title","")) > 52 else "")
+            date_s   = ann.get("date_str", "?")[:10]
+            p0       = ann.get("price_day0")
+            p1       = ann.get("price_day1")
+            chg      = ann.get("price_change_pct")
+            bist_c   = ann.get("bist_change_pct")
 
             chg_str = (
-                f'+%{chg_pct:.2f}' if (chg_pct and chg_pct >= 0)
-                else f'-%{abs(chg_pct):.2f}' if chg_pct
-                else "N/A"
+                f'<font color="#1a7a3c"><b>+{chg:.2f}%</b></font>' if (chg is not None and chg >= 0)
+                else f'<font color="#b91c1c"><b>{chg:.2f}%</b></font>'  if chg is not None
+                else "–"
             )
             bist_str = (
-                f'+%{bist_pct:.2f}' if (bist_pct and bist_pct >= 0)
-                else f'-%{abs(bist_pct):.2f}' if bist_pct
-                else "N/A"
+                f'<font color="#1a7a3c">+{bist_c:.2f}%</font>' if (bist_c is not None and bist_c >= 0)
+                else f'<font color="#b91c1c">{bist_c:.2f}%</font>' if bist_c is not None
+                else "–"
             )
-
-            ann_table_data.append([
-                str(i),
-                date_str,
-                title_short,
-                fmt_price(p0) if p0 else "–",
-                fmt_price(p1) if p1 else "–",
-                chg_str,
-                bist_str,
+            kap_rows.append([
+                str(i), date_s,
+                Paragraph(title_s, P("TS", fontName=F_SANS, fontSize=8, textColor=DARK, leading=11)),
+                f"{p0:.2f}" if p0 else "–",
+                f"{p1:.2f}" if p1 else "–",
+                Paragraph(chg_str, P("CS", fontName=F_SANS, fontSize=9, textColor=DARK, leading=11)),
+                Paragraph(bist_str, P("BS", fontName=F_SANS, fontSize=9, textColor=DARK, leading=11)),
             ])
 
-        ann_table = Table(
-            ann_table_data,
-            colWidths=[0.6*cm, 2.2*cm, 5.5*cm, 2.2*cm, 2.2*cm, 2*cm, 1.8*cm],
+        kap_t = Table(
+            kap_rows,
+            colWidths=[0.5*cm, 1.9*cm, W - 9.4*cm, 1.8*cm, 1.8*cm, 1.7*cm, 1.7*cm]
         )
 
-        ann_row_colors = []
+        row_colors = []
         for i, ann in enumerate(anns[:15], 1):
-            chg_pct = ann.get("price_change_pct")
-            if chg_pct is not None:
-                bg = colors.HexColor("#0b2a1a") if chg_pct >= 0 else colors.HexColor("#2a0b0b")
+            chg = ann.get("price_change_pct")
+            if chg is not None:
+                bg = colors.HexColor("#f0faf4") if chg >= 0 else colors.HexColor("#fef2f2")
             else:
-                bg = colors.HexColor("#0f172a") if i % 2 == 0 else colors.HexColor("#111827")
-            ann_row_colors.append(bg)
+                bg = WHITE if i % 2 == 0 else LIGHT_BG
+            row_colors.append(bg)
 
-        style_cmds = [
-            ("BACKGROUND",   (0,0), (-1,0), LIGHT_GREY),
-            ("TEXTCOLOR",    (0,0), (-1,0), GOLD),
-            ("FONTNAME",     (0,0), (-1,0), _FONT_BOLD),
-            ("FONTSIZE",     (0,0), (-1,-1), 7.5),
-            ("TEXTCOLOR",    (0,1), (-1,-1), TEXT_GREY),
-            ("GRID",         (0,0), (-1,-1), 0.25, colors.HexColor("#1e3a5f")),
-            ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
-            ("TOPPADDING",   (0,0), (-1,-1), 5),
-            ("BOTTOMPADDING",(0,0), (-1,-1), 5),
-            ("LEFTPADDING",  (0,0), (-1,-1), 5),
+        kap_style = [
+            ("FONTNAME",   (0,0), (-1,0), F_SANS_BOLD),
+            ("FONTSIZE",   (0,0), (-1,-1), 8.5),
+            ("FONTNAME",   (0,1), (-1,-1), F_SANS),
+            ("TEXTCOLOR",  (0,0), (-1,0), MUTED),
+            ("TEXTCOLOR",  (0,1), (-1,-1), DARK),
+            ("LINEBELOW",  (0,0), (-1,0), 0.5, LIGHT_LINE),
+            ("LINEBELOW",  (0,-1), (-1,-1), 0.5, LIGHT_LINE),
+            ("TOPPADDING", (0,0), (-1,-1), 4),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+            ("LEFTPADDING", (0,0), (-1,-1), 3),
+            ("VALIGN",     (0,0), (-1,-1), "TOP"),
         ]
-        for i, bg in enumerate(ann_row_colors, 1):
-            style_cmds.append(("BACKGROUND", (0,i), (-1,i), bg))
+        for i, bg in enumerate(row_colors, 1):
+            kap_style.append(("BACKGROUND", (0,i), (-1,i), bg))
+        kap_t.setStyle(TableStyle(kap_style))
+        story.append(kap_t)
 
-        ann_table.setStyle(TableStyle(style_cmds))
-        story.append(ann_table)
+    # ═══════════════════════════════════════════════════════════════════════════
+    # BÖLÜM 6 — Duyuru Detayları
+    # ═══════════════════════════════════════════════════════════════════════════
+    story += section_title("Disclosure Details & Price Impact")
 
-        # Duyuru detayları
-        story.append(Spacer(1, 12))
-        story.append(Paragraph("📋 Duyuru Detayları", s_section))
+    for i, ann in enumerate(anns[:15], 1):
+        title   = ann.get("title", "?")
+        content = ann.get("content", "")
+        date_s  = ann.get("date_str", "?")[:10]
+        chg     = ann.get("price_change_pct")
+        p0      = ann.get("price_day0")
+        p1      = ann.get("price_day1")
+        bist_c  = ann.get("bist_change_pct")
 
-        for i, ann in enumerate(anns[:15], 1):
-            title   = ann.get("title", "?")
-            content = ann.get("content", "")
-            date_s  = ann.get("date_str", "?")
-            url     = ann.get("url", "")
-            chg_pct = ann.get("price_change_pct")
-            p0      = ann.get("price_day0")
-            p1      = ann.get("price_day1")
-            bist_p  = ann.get("bist_change_pct")
+        if chg is not None and p0 and p1:
+            direction = "advanced" if chg >= 0 else "declined"
+            bist_dir  = "rose" if (bist_c or 0) >= 0 else "fell"
+            impact_line = (
+                f"Post-announcement: stock {direction} {abs(chg):.2f}% "
+                f"({p0:.2f} → {p1:.2f} TL). "
+                f"BIST100 {bist_dir} {abs(bist_c):.2f}% on the same day."
+                if bist_c is not None else
+                f"Post-announcement: stock {direction} {abs(chg):.2f}% ({p0:.2f} → {p1:.2f} TL)."
+            )
+        else:
+            impact_line = "Price impact data unavailable for this date."
 
-            # Fiyat etki yorumu
-            if chg_pct is not None and p0 is not None and p1 is not None:
-                direction = "yükseldi" if chg_pct >= 0 else "düştü"
-                bist_dir  = "yükseldi" if (bist_p or 0) >= 0 else "düştü"
-                impact_text = (
-                    f"Duyurudan sonraki gün hisse %{abs(chg_pct):.2f} {direction} "
-                    f"({p0:.2f} → {p1:.2f} TL). "
-                    f"Aynı günde BIST100 %{abs(bist_p):.2f} {bist_dir}."
-                    if bist_p is not None else
-                    f"Duyurudan sonraki gün hisse %{abs(chg_pct):.2f} {direction} ({p0:.2f} → {p1:.2f} TL)."
-                )
-            elif chg_pct is None and ann.get("date_str") != "Bilinmiyor":
-                impact_text = "Bu duyuru tarihi için fiyat verisi mevcut değil (1 yıl öncesi veya gelecek tarih olabilir)."
-            else:
-                impact_text = "Duyuru tarihi bilinemediği için fiyat etkisi hesaplanamadı."
+        # Get AI Commentary
+        ai_comment = generate_agent_commentary(ann, chg)
 
-            block = KeepTogether([
-                Paragraph(f"{i}. {title}", s_ann_title),
-                Paragraph(f"📅 {date_s}  |  Kaynak: {ann.get('source','?')}", s_ann_meta),
-                Spacer(1, 3),
-                Paragraph(content[:400] + ("…" if len(content) > 400 else ""), s_small),
-                Spacer(1, 3),
-                Paragraph(f"💹 Fiyat Etkisi: {impact_text}", s_bold),
-                Spacer(1, 6),
-                HRFlowable(width="100%", thickness=0.25,
-                           color=colors.HexColor("#1e3a5f"), spaceAfter=6),
-            ])
-            story.append(block)
+        blk = KeepTogether([
+            Paragraph(f"<b>{i}. {title}</b>", s_ann_title),
+            Paragraph(f"{date_s}  ·  {ann.get('source','?')}", s_ann_meta),
+            Spacer(1, 3),
+            Paragraph(f"<b>Bildirim Metni:</b> {content[:500]}...", s_small),
+            Spacer(1, 6),
+            Paragraph(f"<b>ÖZAS Agent Yorumu:</b>", s_ann_title), # Using same style for sub-header
+            Paragraph(ai_comment, s_body),
+            Spacer(1, 6),
+            Paragraph(f"<b>Fiyat Etkisi:</b> {impact_line}", s_impact),
+            Spacer(1, 6),
+            divider(thick=0.25, color=LIGHT_LINE, before=0, after=4),
+        ])
+        story.append(blk)
 
-    # ═══════════════════════════════════════
-    # FOOTER
-    # ═══════════════════════════════════════
-    story.append(Spacer(1, 16))
-    story.append(divider())
+    # ═══════════════════════════════════════════════════════════════════════════
+    # FOOTER — Disclaimer
+    # ═══════════════════════════════════════════════════════════════════════════
+    story.append(Spacer(1, 20))
+    story.append(divider(thick=0.5, color=LIGHT_LINE, before=0, after=10))
     story.append(Paragraph(
-        "⚠️ Bu rapor ÖZAS Finance Agent tarafından yalnızca akademik ve bilgi amaçlı üretilmiştir. "
-        "Yatırım tavsiyesi niteliği taşımaz. Al/sat kararları için kullanılamaz. "
-        "Veriler Yahoo Finance ve Google News RSS üzerinden otomatik alınmıştır.",
-        s_small))
+        "REGULATORY DISCLAIMER: This report is generated by the ÖZAS Finance Agent for "
+        "academic simulation purposes only. The information does not constitute investment "
+        "advice, financial guidance, or any buy/sell recommendation. All data sourced from "
+        "Yahoo Finance and KAP Direct (Public Disclosure Platform). Consult a licensed financial advisor before "
+        "making any investment decisions.",
+        s_disclaimer
+    ))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(
+        f"Page 1 of 1  ·  ÖZAS Finance Intelligent Systems  ·  Generated {gen_at}",
+        P("Footer2", fontName=F_SANS, fontSize=7.5, textColor=VERY_MUTED, alignment=TA_CENTER)
+    ))
 
     doc.build(story)
     return buf.getvalue()
 
 
+
 # ─────────────────────────────────────────────────────────────
+
 #  Yardımcı Fonksiyonlar
 # ─────────────────────────────────────────────────────────────
 
