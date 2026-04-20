@@ -1,7 +1,7 @@
-\"\"\"
+"""
 KAP Scraper — Playwright Direct Ingestion (Academic Simulation)
 Directly scrapes Kamuyu Aydınlatma Platformu (kap.org.tr) for ground-truth data.
-\"\"\"
+"""
 
 import os
 import json
@@ -18,13 +18,13 @@ class KAPScraper:
         os.makedirs(save_dir, exist_ok=True)
 
     def scrape(self, ticker: str, limit: int = 15) -> list[dict]:
-        \"\"\"Alias for fetch_disclosures to match router interface.\"\"\"
+        """Alias for fetch_disclosures to match router interface."""
         return self.fetch_disclosures(ticker, limit)
 
     def fetch_disclosures(self, ticker: str, limit: int = 15) -> list[dict]:
-        \"\"\"
+        """
         Navigates to KAP, filters for the ticker, and extracts disclosures.
-        \"\"\"
+        """
         logger.info(f"Playwright directed KAP ingestion for {ticker}...")
         docs: list[dict] = []
         
@@ -40,13 +40,12 @@ class KAPScraper:
                 # Navigate to KAP
                 page.goto('https://www.kap.org.tr/tr/', wait_until='domcontentloaded')
                 
-                # Step 1: Search Ticker
+                # Search Ticker
                 page.fill('#all-search', ticker)
                 page.wait_for_timeout(2000)
                 
-                # Select from dropdown
                 try:
-                    company_selector = f'#searchDiv a:has-text(\"{ticker}\")'
+                    company_selector = f'#searchDiv a:has-text("{ticker}")'
                     if page.locator(company_selector).count() > 0:
                         page.click(company_selector)
                     else:
@@ -58,19 +57,19 @@ class KAPScraper:
                 
                 # Navigate to 'Bildirimler' Tab
                 try:
-                    page.click('a:has-text(\"Bildirimler\")', timeout=15000)
+                    page.click('a:has-text("Bildirimler")', timeout=15000)
                     page.wait_for_timeout(2000)
                 except:
-                    logger.warning(\"Bildirimler tab navigation timed out.\")
+                    logger.warning("Bildirimler tab navigation timed out.")
 
                 # Filter 'Son 1 ay'
                 try:
-                    page.click('text=\"Son 1 ay\"', timeout=10000)
+                    page.click('text="Son 1 ay"', timeout=10000)
                     page.wait_for_timeout(500)
-                    page.click('button:has-text(\"Ara\")')
+                    page.click('button:has-text("Ara")')
                     page.wait_for_timeout(3000)
                 except:
-                    logger.warning(\"Filtering failed, scraping current view.\")
+                    logger.warning("Filtering failed, scraping current view.")
 
                 # Extract Table Rows
                 rows = page.locator('table tbody tr').all()
@@ -83,17 +82,17 @@ class KAPScraper:
                         dt_obj = self._parse_kap_date(dt_str)
                         
                         link_el = row.locator('a').first
-                        url = \"https://www.kap.org.tr\" + link_el.get_attribute('href') if link_el.count() > 0 else \"\"
+                        url = "https://www.kap.org.tr" + link_el.get_attribute('href') if link_el.count() > 0 else ""
                         
                         docs.append({
-                            \"ticker\":      ticker.upper(),
-                            \"source_type\": \"kap\",
-                            \"date\":        dt_obj.strftime(\"%Y-%m-%dT%H:%M:%SZ\") if dt_obj else datetime.utcnow().strftime(\"%Y-%m-%dT%H:%M:%SZ\"),
-                            \"institution\": \"KAP Direct\",
-                            \"title\":       cells[5].strip(), # Konu
-                            \"content\":     cells[6].strip() if len(cells) > 6 else \"\", # Özet Bilgi
-                            \"url\":         url,
-                            \"disc_type\":   cells[4].strip() # Tip
+                            "ticker":      ticker.upper(),
+                            "source_type": "kap",
+                            "date":        dt_obj.strftime("%Y-%m-%dT%H:%M:%SZ") if dt_obj else datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                            "institution": "KAP Direct",
+                            "title":       cells[5].strip(), # Konu
+                            "content":     cells[6].strip() if len(cells) > 6 else "", # Özet Bilgi
+                            "url":         url,
+                            "disc_type":   cells[4].strip() # Tip
                         })
                 
                 browser.close()
@@ -109,18 +108,18 @@ class KAPScraper:
 
     def _parse_kap_date(self, raw: str) -> Optional[datetime]:
         now = datetime.now()
-        if \"Bugün\" in raw:
+        if "Bugün" in raw:
             try:
-                t_str = raw.replace(\"Bugün\", \"\").strip()
-                return datetime.combine(now.date(), datetime.strptime(t_str, \"%H:%M\").time())
+                t_str = raw.replace("Bugün", "").strip()
+                return datetime.combine(now.date(), datetime.strptime(t_str, "%H:%M").time())
             except: t = now
-        elif \"Dün\" in raw:
+        elif "Dün" in raw:
             try:
-                t_str = raw.replace(\"Dün\", \"\").strip()
-                return datetime.combine(now.date() - timedelta(days=1), datetime.strptime(t_str, \"%H:%M\").time())
+                t_str = raw.replace("Dün", "").strip()
+                return datetime.combine(now.date() - timedelta(days=1), datetime.strptime(t_str, "%H:%M").time())
             except: t = now - timedelta(days=1)
         
-        for fmt in [\"%d.%m.%Y %H:%M\", \"%d.%m.%Y\", \"%Y-%m-%d\"]:
+        for fmt in ["%d.%m.%Y %H:%M", "%d.%m.%Y", "%Y-%m-%d"]:
             try:
                 return datetime.strptime(raw.strip()[:16], fmt)
             except: continue
@@ -128,16 +127,25 @@ class KAPScraper:
 
     def _make_fallback(self, ticker: str) -> list[dict]:
         return [{
-            \"ticker\":      ticker.upper(),
-            \"source_type\": \"kap\",
-            \"date\":        datetime.utcnow().strftime(\"%Y-%m-%dT%H:%M:%SZ\"),
-            \"institution\": \"KAP System\",
-            \"title\":       f\"{ticker} Bildirimi Alınamadı\",
-            \"content\":     f\"KAP verilerine şu an erişilemiyor. Lütfen kap.org.tr'yi kontrol edin.\",
-            \"url\":         f\"https://www.kap.org.tr/tr/sirket/{ticker.lower()}\"
+            "ticker":      ticker.upper(),
+            "source_type": "kap",
+            "date":        datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "institution": "KAP System",
+            "title":       f"{ticker} Bildirimi Alınamadı",
+            "content":     "KAP verilerine şu an erişilemiyor. Lütfen kap.org.tr'yi kontrol edin.",
+            "url":         f"https://www.kap.org.tr/tr/sirket/{ticker.lower()}"
         }]
 
     def _save(self, ticker: str, docs: list[dict]) -> None:
-        path = os.path.join(self.save_dir, f\"{ticker.lower()}_disclosures.json\")
-        with open(path, \"w\", encoding=\"utf-8\") as f:
+        path = os.path.join(self.save_dir, f"{ticker.lower()}_disclosures.json")
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(docs, f, ensure_ascii=False, indent=2)
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    ks = KAPScraper()
+    print(f"Testing ASELS...")
+    results = ks.scrape("ASELS", limit=5)
+    print(f"Found {len(results)} results.")
+    for r in results:
+        print(f"- {r['date']} | {r['title']}")
