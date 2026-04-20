@@ -46,3 +46,4 @@ streamlit
 tqdm
 uvicorn
 yfinance
+reportlab

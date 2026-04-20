@@ -796,25 +796,153 @@
         const ticker = getTicker();
         if (!ticker) { alert('Please select an equity first.'); return; }
         const btn = document.getElementById('btn-kap');
-        const preview = document.getElementById('preview-kap');
         btn.disabled = true;
-        setStatus('status-kap', 'Fetching disclosures from KAP.org.tr…', true);
+        setStatus('status-kap', 'Fetching KAP disclosures via RSS…', true);
         try {
-            const res = await fetch(`${API_URL}/ingest/kap`, {
+            // Use new intelligence/analyze endpoint (Google News RSS + Yahoo Finance)
+            const res = await fetch(window.location.origin + '/api/agent/intelligence/analyze', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ticker, limit: 5 })
+                body: JSON.stringify({ ticker, kap_limit: 15 })
             });
-            if (!res.ok) throw new Error(res.status);
-            const d = await res.json();
-            if (d.error) throw new Error(d.error);
-            setStatus('status-kap', `✓ ${d.docs} filings · ${d.chunks_added} chunks indexed`, true);
-            
-            if (d.summaries) {
-                preview.innerHTML = d.summaries.map(s => `<div style="font-size:8px; border-bottom:1px solid rgba(255,255,255,0.05); padding-top:4px; color:#fff;">[${s.date}] ${s.title.substring(0,35)}...</div>`).join('');
-                preview.style.display = 'block';
+
+            // Fallback to old endpoint if intelligence not available on this backend
+            if (!res.ok && res.status === 404) {
+                const res2 = await fetch(`${API_URL}/ingest/kap`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticker, limit: 15 })
+                });
+                if (!res2.ok) throw new Error(res2.status);
+                const d2 = await res2.json();
+                setStatus('status-kap', `✓ ${d2.docs || 0} filings · ${d2.chunks_added || 0} chunks`, true);
+                btn.classList.add('success');
+                btn.disabled = false;
+                return;
             }
+
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const anns = data.announcements || [];
+            const company = data.company || {};
+
+            setStatus('status-kap', `✓ ${anns.length} KAP duyurusu · Yahoo Finance verisi alındı`, true);
             btn.classList.add('success');
-        } catch (e) { setStatus('status-kap', '✗ Fetch failed — check API log', false); }
+
+            // ── Auto-populate Market Dashboard ──────────────────────────────
+            const md = document.getElementById('market-dashboard');
+            md.style.display = 'block';
+
+            // Price
+            const lc = company.last_close;
+            const dc = company.day_change_pct;
+            if (lc != null) {
+                document.getElementById('m-price').textContent = lc.toFixed(2) + ' TL';
+                const changeEl = document.getElementById('m-change');
+                changeEl.textContent = (dc >= 0 ? '+' : '') + dc.toFixed(2) + '% Today';
+                changeEl.className = 'm-sub ' + (dc >= 0 ? 'val-up' : 'val-down');
+            }
+
+            // Returns vs BIST100
+            const r1y  = company.ret_1y;
+            const vs   = company.vs_bist_1y;
+            if (r1y != null) {
+                document.getElementById('m-returns').textContent = (r1y >= 0 ? '+' : '') + r1y.toFixed(1) + '%';
+                const relEl = document.getElementById('m-relative');
+                relEl.textContent = (vs != null ? (vs >= 0 ? 'Outperforming BIST100 +' + vs.toFixed(1) + '%' : 'Underperforming BIST100 ' + vs.toFixed(1) + '%') : '');
+                relEl.className = 'm-sub ' + (vs >= 0 ? 'val-up' : 'val-down');
+            }
+
+            // KAP Reaction (last announcement with price data)
+            const withImpact = anns.filter(a => a.price_change_pct != null);
+            if (withImpact.length > 0) {
+                const latest = withImpact[0];
+                const chg = latest.price_change_pct;
+                const impactEl = document.getElementById('m-impact');
+                impactEl.textContent = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+                impactEl.className = 'm-value ' + (chg >= 0 ? 'val-up' : 'val-down');
+                document.getElementById('m-impact-date').textContent = 'Next day after ' + (latest.date_str || '?').slice(0,10);
+            }
+
+            // Stability
+            const stab = company.stability_score;
+            const vol  = company.volatility_1y;
+            if (stab != null) {
+                document.getElementById('m-stability').textContent = stab + '/100';
+                document.getElementById('m-volatility').textContent = 'Vol: ' + (vol || '?') + '%';
+            }
+
+            // Store data for PDF
+            window._ozasIntelData = data;
+
+            // Show KAP table in a collapsible section below dashboard
+            _renderKAPTable(ticker, anns, company);
+
+        } catch (e) {
+            console.error(e);
+            setStatus('status-kap', '✗ Fetch failed — ' + e.message, false);
+        }
+        btn.disabled = false;
+    }
+
+    function _renderKAPTable(ticker, anns, company) {
+        let existing = document.getElementById('kap-intel-section');
+        if (!existing) {
+            existing = document.createElement('div');
+            existing.id = 'kap-intel-section';
+            existing.style.cssText = 'margin-top:20px;animation:fadeIn 0.5s ease;';
+            document.getElementById('result-area').before(existing);
+        }
+
+        const rows = anns.slice(0, 15).map((ann, i) => {
+            const chg = ann.price_change_pct;
+            const chgStr = chg != null ? `<span style="color:${chg >= 0 ? '#2ecc71' : '#e74c3c'};font-weight:700;">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>` : '<span style="color:#666;">–</span>';
+            const bist  = ann.bist_change_pct;
+            const bistStr = bist != null ? `<span style="color:${bist >= 0 ? '#2ecc71' : '#e74c3c'}">${bist >= 0 ? '+' : ''}${bist.toFixed(2)}%</span>` : '–';
+            const title = (ann.title || '').substring(0, 65) + (ann.title && ann.title.length > 65 ? '…' : '');
+            return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                <td style="padding:7px 10px;font-size:9px;color:#888;white-space:nowrap;">${(ann.date_str || '?').slice(0,10)}</td>
+                <td style="padding:7px 10px;font-size:10px;color:#ddd;">${title}</td>
+                <td style="padding:7px 10px;font-size:10px;text-align:right;">${chgStr}</td>
+                <td style="padding:7px 10px;font-size:10px;text-align:right;">${bistStr}</td>
+            </tr>`;
+        }).join('');
+
+        existing.innerHTML = `
+        <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;">
+            <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:11px;font-weight:700;letter-spacing:1px;color:#937d65;text-transform:uppercase;">📢 Son ${anns.length} KAP Duyurusu — Ertesi Gün Fiyat Etkisi</span>
+                <button onclick="downloadIntelPDF('${ticker}')" style="background:#f5c842;color:#000;border:none;padding:7px 14px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">📥 PDF Raporu İndir</button>
+            </div>
+            <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;">
+                <thead><tr style="background:rgba(255,255,255,0.03);">
+                    <th style="padding:8px 10px;font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#937d65;text-align:left;">Tarih</th>
+                    <th style="padding:8px 10px;font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#937d65;text-align:left;">Başlık</th>
+                    <th style="padding:8px 10px;font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#937d65;text-align:right;">Hisse T+1</th>
+                    <th style="padding:8px 10px;font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#937d65;text-align:right;">BIST100</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            </div>
+        </div>`;
+    }
+
+    async function downloadIntelPDF(ticker) {
+        const btn = event.target;
+        btn.textContent = '⏳ Oluşturuluyor...';
+        btn.disabled = true;
+        try {
+            const url = window.location.origin + '/api/agent/intelligence/report?ticker=' + ticker + '&kap_limit=15';
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('PDF alınamadı');
+            const blob = await res.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `OZAS_${ticker}_Report.pdf`;
+            a.click();
+        } catch(e) {
+            alert('PDF indirilemedi: ' + e.message);
+        }
+        btn.textContent = '📥 PDF Raporu İndir';
         btn.disabled = false;
     }
 

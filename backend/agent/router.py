@@ -121,4 +121,66 @@ async def query(req: QueryRequest):
 
 @router.get("/status")
 async def get_status():
-    return {"status": "online", "version": "4.2.2-resilient"}
+    store = None
+    total_chunks = 0
+    try:
+        store = get_store()
+        total_chunks = store.collection.count()
+    except: pass
+
+    groq_key = bool(os.getenv("GROQ_API_KEY"))
+    return {
+        "status": "online",
+        "version": "4.2.2-resilient",
+        "database": {"total_chunks": total_chunks},
+        "environment": {"groq_api_key": groq_key}
+    }
+
+
+# ─── Intelligence Endpoints (KAP + Yahoo Finance) ─────────────────────────────
+
+class IntelligenceReq(BaseModel):
+    ticker:    str
+    kap_limit: int = 15
+
+
+@router.post("/intelligence/analyze")
+async def intelligence_analyze(req: IntelligenceReq):
+    """
+    Google News RSS + Yahoo Finance üzerinden tam KAP + piyasa analizi.
+    Market Dashboard kartlarını doldurmak için kullanılır.
+    """
+    try:
+        from backend.agent.ingestion.kap_intelligence import full_analysis
+        result = full_analysis(req.ticker.upper(), kap_limit=req.kap_limit)
+        for ann in result.get("announcements", []):
+            ann.pop("date_obj", None)
+        return result
+    except Exception as e:
+        logger.error(f"intelligence_analyze failed: {e}")
+        raise HTTPException(500, f"Analiz hatası: {str(e)}")
+
+
+@router.get("/intelligence/report")
+async def intelligence_report(ticker: str = "ASELS", kap_limit: int = 15):
+    """
+    Tam analiz yapıp PDF rapor döner. agent.html'deki 'PDF Raporu İndir' butonuna bağlıdır.
+    """
+    from fastapi.responses import StreamingResponse
+    try:
+        from backend.agent.ingestion.kap_intelligence import full_analysis, generate_pdf_report
+    except Exception as e:
+        raise HTTPException(500, f"Intelligence module not found: {e}")
+
+    try:
+        result = full_analysis(ticker.upper(), kap_limit=kap_limit)
+        pdf_bytes = generate_pdf_report(result)
+        fname = f"OZAS_{ticker.upper()}_Report_{result['generated_at'][:10]}.pdf"
+        return StreamingResponse(
+            iter([pdf_bytes]),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={fname}"}
+        )
+    except Exception as e:
+        logger.error(f"intelligence_report failed: {e}")
+        raise HTTPException(500, f"Rapor hatası: {str(e)}")
