@@ -147,7 +147,7 @@ class IntelligenceReq(BaseModel):
 async def intelligence_analyze(req: IntelligenceReq):
     try:
         from backend.agent.ingestion.kap_intelligence import full_analysis
-        result = full_analysis(req.ticker.upper(), kap_limit=req.kap_limit)
+        result = await full_analysis(req.ticker.upper(), kap_limit=req.kap_limit)
         for ann in result.get("announcements", []):
             ann.pop("date_obj", None)
         return result
@@ -160,7 +160,7 @@ async def intelligence_report(ticker: str = "ASELS", kap_limit: int = 15):
     from fastapi.responses import StreamingResponse
     try:
         from backend.agent.ingestion.kap_intelligence import full_analysis, generate_pdf_report
-        result = full_analysis(ticker.upper(), kap_limit=kap_limit)
+        result = await full_analysis(ticker.upper(), kap_limit=kap_limit)
         pdf_bytes = generate_pdf_report(result)
         fname = f"OZAS_{ticker.upper()}_Report_{result['generated_at'][:10]}.pdf"
         return StreamingResponse(
@@ -185,7 +185,7 @@ async def ingest_kap(req: IngestReq):
     store = get_store()
     try:
         ks = KAPScraper()
-        docs = ks.scrape(req.ticker, limit=req.limit)
+        docs = await ks.scrape(req.ticker, limit=req.limit)
         store.add_documents(docs)
         return {"status": "success", "docs": len(docs), "chunks_added": len(docs)}
     except Exception as e:
@@ -198,7 +198,7 @@ async def ingest_news(req: IngestReq):
     store = get_store()
     try:
         ns = NewsScraper()
-        docs = ns.fetch_news(req.ticker, limit=req.limit, days_back=req.days_back)
+        docs = await ns.fetch_news(req.ticker, limit=req.limit, days_back=req.days_back)
         store.add_documents(docs)
         return {"status": "success", "count": len(docs), "docs": docs}
     except Exception as e:
