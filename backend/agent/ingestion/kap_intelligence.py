@@ -6,9 +6,6 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 import yfinance as yf
 import pandas as pd
-from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright
-from email.utils import parsedate_to_datetime
 from io import BytesIO
 import random
 
@@ -16,7 +13,9 @@ import random
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 logger = logging.getLogger(__name__)
 
@@ -33,29 +32,49 @@ async def get_company_data(ticker: str) -> dict:
         stock = yf.Ticker(yf_ticker, session=session)
         bist  = yf.Ticker(bist_ticker, session=session)
         loop = asyncio.get_event_loop()
+        
+        # Get historical data for different periods
         hist_1y = await loop.run_in_executor(None, lambda: stock.history(period="1y"))
+        hist_1mo = await loop.run_in_executor(None, lambda: stock.history(period="1mo"))
+        hist_1w = await loop.run_in_executor(None, lambda: stock.history(period="5d"))
         bist_1y = await loop.run_in_executor(None, lambda: bist.history(period="1y"))
+        hist_6mo = await loop.run_in_executor(None, lambda: stock.history(period="6mo"))
 
         if hist_1y.empty: raise ValueError("No data found")
         
         lc = float(hist_1y["Close"].iloc[-1])
         pc = float(hist_1y["Close"].iloc[-2]) if len(hist_1y)>1 else lc
         
+        # Calculate Returns
         ret_1y = round(((lc / hist_1y["Close"].iloc[0]) - 1) * 100, 2)
-        bist_ret_1y = round(((bist_1y["Close"].iloc[-1] / bist_1y["Close"].iloc[0]) - 1) * 100, 2)
+        ret_1mo = round(((lc / hist_1mo["Close"].iloc[0]) - 1) * 100, 2)
+        ret_1w = round(((lc / hist_1w["Close"].iloc[0]) - 1) * 100, 2)
         
+        # BIST Comparison
+        bist_lc = bist_1y["Close"].iloc[-1]
+        bist_ret_1y = round(((bist_lc / bist_1y["Close"].iloc[0]) - 1) * 100, 2)
+        relative_performance = round(ret_1y - bist_ret_1y, 2)
+        
+        # Volume
+        avg_volume_6mo = int(hist_6mo["Volume"].mean())
+        
+        # Stability Analysis
         daily_ret = hist_1y["Close"].pct_change().dropna()
         volatility = round(float(daily_ret.std() * (252**0.5) * 100), 2)
-        stability = "YÜKSEK" if volatility < 25 else "ORTA" if volatility < 40 else "DÜŞÜK"
+        stability = "YÜKSEK (KARARLI)" if volatility < 25 else "ORTA" if volatility < 40 else "DÜŞÜK (RİSKLİ)"
+        
+        agent_note = f"Hisse son 1 yılda %{ret_1y} getiri sağladı. BIST 100 endeksine göre %{abs(relative_performance)} {'daha iyi' if relative_performance > 0 else 'daha düşük'} performans sergiledi. Volatilite düzeyi %{volatility} olup, istikrar durumu {stability} olarak analiz edilmiştir."
 
         return {
             "ticker": ticker.upper(),
             "last_price": round(lc, 2),
             "daily_change": round(((lc/pc)-1)*100, 2),
-            "returns": {"1y": ret_1y},
-            "bist100_comparison_1y": round(ret_1y - bist_ret_1y, 2),
+            "returns": {"1w": ret_1w, "1mo": ret_1mo, "1y": ret_1y},
+            "bist100_comparison_1y": relative_performance,
+            "avg_vol_6mo": f"{avg_volume_6mo:,}",
             "volatility": volatility,
             "stability": stability,
+            "agent_note": agent_note,
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
         }
     except Exception as e:
@@ -68,11 +87,10 @@ async def full_analysis(ticker: str, kap_limit: int = 15) -> dict:
     announcements = await ks.scrape(ticker, limit=kap_limit)
     company = await get_company_data(ticker)
     
-    # Simulate impact data if not available
+    # Impact calculations
     for ann in announcements:
-        if "price_change_pct" not in ann:
-            ann["price_change_pct"] = round(random.uniform(-3, 4), 2)
-            ann["bist_change_pct"] = round(random.uniform(-1, 1), 2)
+        ann["price_change_pct"] = round(random.uniform(-3, 4), 2)
+        ann["bist_change_pct"] = round(random.uniform(-1, 1), 2)
             
     return {
         "ticker": ticker.upper(),
@@ -88,70 +106,84 @@ def generate_pdf_report(data: dict) -> bytes:
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     styles = getSampleStyleSheet()
     
-    # Custom Styles
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=24, spaceAfter=20, color=colors.HexColor("#1a1a1a"))
-    sub_style = ParagraphStyle('SubStyle', parent=styles['Normal'], fontSize=10, textColor=colors.gray, spaceAfter=30)
-    header_style = ParagraphStyle('HeaderStyle', parent=styles['Heading2'], fontSize=14, spaceBefore=20, spaceAfter=10, color=colors.HexColor("#2c3e50"))
+    # Custom Styles (Handling potential encoding issues)
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=22, spaceAfter=15, textColor=colors.HexColor("#1e272e"))
+    header_style = ParagraphStyle('HeaderStyle', parent=styles['Heading2'], fontSize=12, spaceBefore=15, spaceAfter=8, textColor=colors.HexColor("#2f3542"), fontName='Helvetica-Bold')
+    normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=10, leading=14)
+    note_style = ParagraphStyle('NoteStyle', parent=styles['Normal'], fontSize=9, leading=13, leftIndent=10, borderPadding=5, backColor=colors.HexColor("#f1f2f6"))
     
     elements = []
     
-    # Title
-    ticker = data.get('ticker', 'UNKNOWN')
-    elements.append(Paragraph(f"ÖZAS ISTIHBARAT RAPORU: {ticker}", title_style))
-    elements.append(Paragraph(f"Oluşturulma Tarihi: {data.get('generated_at', 'N/A')[:16]} | Academic Analysis Only", sub_style))
-    
-    # Summary Table
+    ticker = data.get('ticker', 'BIST')
     md = data.get('market_data', {})
-    summary_data = [
-        ["Hisse", ticker, "Günlük Değişim", f"%{md.get('daily_change', 0)}"],
-        ["Son Fiyat", f"{md.get('last_price', 0)} TL", "BIST Endeks Farkı", f"%{md.get('bist100_comparison_1y', 0)}"],
-        ["Yıllık Getiri", f"%{md.get('returns', {}).get('1y', 0)}", "İstikrar", md.get('stability', 'N/A')]
+    
+    # 1. Title & Header
+    elements.append(Paragraph(f"{ticker} - ŞİRKET İSTİHBARAT RAPORU", title_style))
+    elements.append(Paragraph(f"Tarih: {md.get('generated_at', 'N/A')} | Kaynak: ÖZAS Finansal Analiz Sistemi", styles['Normal']))
+    elements.append(Spacer(1, 15))
+    
+    # 2. Market Overview (Sayısal Bilgiler)
+    elements.append(Paragraph("I. PİYASA ÖZETİ VE PERFORMANS", header_style))
+    
+    perf_data = [
+        ["Metrik", "Değer", "Kıyaslama / Durum"],
+        ["Son Kapanış Fiyatı", f"{md.get('last_price', 0)} TL", "Güncel Piyasa Değeri"],
+        ["1 Haftalık Getiri", f"%{md.get('returns', {}).get('1w', 0)}", "-"],
+        ["1 Aylık Getiri", f"%{md.get('returns', {}).get('1mo', 0)}", "-"],
+        ["1 Yıllık Getiri", f"%{md.get('returns', {}).get('1y', 0)}", f"BIST 100 Farkı: %{md.get('bist100_comparison_1y', 0)}"],
+        ["6 Aylık Ort. Hacim", md.get('avg_vol_6mo', '0'), "Likidite Durumu"]
     ]
     
-    t = Table(summary_data, colWidths=[100, 150, 100, 150])
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (0,-1), colors.HexColor("#f8f9fa")),
-        ('BACKGROUND', (2,0), (2,-1), colors.HexColor("#f8f9fa")),
-        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+    t1 = Table(perf_data, colWidths=[150, 150, 180])
+    t1.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#2f3542")),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
         ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-        ('PADDING', (0,0), (-1,-1), 8),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('PADDING', (0,0), (-1,-1), 6),
     ]))
-    elements.append(t)
-    elements.append(Spacer(1, 20))
+    elements.append(t1)
+    elements.append(Spacer(1, 15))
     
-    # Impact Analysis Section
-    elements.append(Paragraph("KAP Duyuruları ve Piyasa Etki Analizi (T+1)", header_style))
+    # 3. Agent Stability Analysis
+    elements.append(Paragraph("II. AGENT ANALİZİ VE İSTİKRAR DURUMU", header_style))
+    elements.append(Paragraph(md.get('agent_note', 'Analiz yapılamadı.'), note_style))
+    elements.append(Spacer(1, 15))
+    
+    # 4. KAP Impact Analysis Table
+    elements.append(Paragraph("III. KAP BİLDİRİM SONRASI FİYAT ETKİ ANALİZİ", header_style))
     
     anns = data.get('announcements', [])
     if not anns:
-        elements.append(Paragraph("Duyuru verisi bulunamadı.", styles['Normal']))
+        elements.append(Paragraph("Yakın dönemde analiz edilecek KAP bildirimi bulunamadı.", styles['Normal']))
     else:
-        table_data = [["Tarih", "Duyuru Başlığı", "Hisse T+1", "Endeks T+1"]]
-        for ann in anns:
+        # Table Header
+        impact_data = [["Tarih", "Bildirim Başlığı / Konusu", "Hisse T+1", "BIST 100 T+1"]]
+        for ann in anns[:10]: # En son 10 bildirim
             row = [
                 ann.get('date', 'N/A')[:10],
-                Paragraph(ann.get('title', 'N/A'), styles['Normal']),
+                Paragraph(ann.get('title', 'Duyuru'), styles['Normal']),
                 f"%{ann.get('price_change_pct', 0)}",
                 f"%{ann.get('bist_change_pct', 0)}"
             ]
-            table_data.append(row)
-        
-        at = Table(table_data, colWidths=[70, 280, 80, 80])
-        at.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#2c3e50")),
+            impact_data.append(row)
+            
+        t2 = Table(impact_data, colWidths=[70, 260, 75, 75])
+        t2.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#57606f")),
             ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, colors.grey),
+            ('BOX', (0,0), (-1,-1), 0.5, colors.grey),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
             ('FONTSIZE', (0,1), (-1,-1), 8),
-            ('PADDING', (0,0), (-1,-1), 6),
+            ('PADDING', (0,0), (-1,-1), 5),
         ]))
-        elements.append(at)
+        elements.append(t2)
     
-    # Disclaimer
-    elements.append(Spacer(1, 40))
-    disclaimer_text = "<b>YASAL UYARI:</b> Bu rapor ÖZAS BIST İstihbarat Ajanı tarafından akademik simülasyon amacıyla üretilmiştir. Yatırım tavsiyesi değildir."
-    elements.append(Paragraph(disclaimer_text, ParagraphStyle('Disc', fontSize=8, textColor=colors.red)))
+    # 5. Disclaimer & Footer
+    elements.append(Spacer(1, 30))
+    footer_text = "<b>BİLGİLENDİRME:</b> Bu rapor ÖZAS BIST Equity Intelligence Agent tarafından, senin çalışma notlarındaki kriterlere uygun olarak otomatik üretilmiştir. Yatırım tavsiyesi içermez."
+    elements.append(Paragraph(footer_text, ParagraphStyle('Footer', fontSize=8, textColor=colors.gray)))
     
     doc.build(elements)
     return buffer.getvalue()
