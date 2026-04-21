@@ -8,6 +8,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
+import asyncio
 from playwright.async_api import async_playwright
 
 logger = logging.getLogger(__name__)

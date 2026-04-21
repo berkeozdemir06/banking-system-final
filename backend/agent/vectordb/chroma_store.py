@@ -61,6 +61,10 @@ class BISTVectorStore:
             f"docs={self._collection.count()}"
         )
 
+    @property
+    def collection(self):
+        return self._collection
+
     # ── Public API ────────────────────────────────────────────────────────────
 
     def add_documents(self, chunks: list[dict]) -> int:
