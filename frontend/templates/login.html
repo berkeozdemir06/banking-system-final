@@ -1138,11 +1138,20 @@
                 const password = passwordInput.value;
 
                 if (loginBtn.classList.contains('btn-error')) return;
+                if (loginBtn.disabled) return;
 
                 if(!username || !password) {
                     flashButtonError("PLEASE ENTER ALL CREDENTIALS");
                     return;
                 }
+
+                // ⚡ Instant feedback — user knows button was pressed
+                loginBtn.disabled = true;
+                loginBtn.innerText = 'VERIFYING...';
+                loginBtn.style.opacity = '0.7';
+
+                // Pre-generate captcha in parallel (ready before response arrives)
+                generateSecurityCode();
 
                 try {
                     const resp = await fetch('/auth/login', {
@@ -1155,15 +1164,18 @@
 
                     if(resp.ok) {
                         localStorage.setItem('active_tc', data.tc_identity);
-                        // Store token in cookie for server-side auth guard on /dashboard
                         if (data.token) {
                             document.cookie = `ozas_token=${data.token}; path=/; max-age=7200; SameSite=Lax`;
                         }
                         document.getElementById('captcha-input').value = '';
                         document.getElementById('captcha-error').style.display = 'none';
+                        // Captcha already generated — overlay appears instantly
                         document.getElementById('recaptcha-overlay').style.display = 'flex';
-                        generateSecurityCode();
+                        document.getElementById('captcha-input').focus();
                     } else {
+                        loginBtn.disabled = false;
+                        loginBtn.innerText = 'SIGN IN';
+                        loginBtn.style.opacity = '1';
                         if(data.detail === "USER_NOT_FOUND") {
                             flashButtonError("IDENTITY NOT RECOGNIZED");
                         } else if(data.detail === "INCORRECT_PASSWORD") {
