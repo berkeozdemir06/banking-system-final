@@ -917,51 +917,90 @@ async def market_search(q: str):
 # Global FX Cache to speed up details requests
 FX_CACHE = {"USDTRY": 32.95, "last_sync": 0}
 
-# Per-symbol result cache: {symbol+period+interval: {data, ts}}
+# Per-symbol result cache — 3 min TTL is enough for a banking demo
 MARKET_DETAILS_CACHE = {}
-MARKET_DETAILS_TTL = 60  # seconds
+MARKET_DETAILS_TTL = 180
 
 def _fetch_market_details_sync(symbol: str, period: str, interval: str):
-    """Runs in a thread pool — keeps the async event loop free."""
+    """
+    Uses yf.download() for chart data (faster than Ticker.history)
+    and Ticker.fast_info for live price/meta — both in one thread.
+    """
+    # fast_info is a single lightweight request
     ticker = yf.Ticker(symbol)
-    hist = ticker.history(period=period, interval=interval)
-    price = ticker.fast_info.last_price
-    prev_close = ticker.fast_info.previous_close
-    currency = ticker.fast_info.currency
-    market_state = ticker.fast_info.get('market_state', 'OPEN')
-    chart_data = hist['Close'].dropna().tolist()
+    fi = ticker.fast_info
+    price = fi.last_price or 0
+    prev_close = fi.previous_close or price
+    currency = fi.currency or 'TRY'
+    try:
+        market_state = fi.market_state or 'OPEN'
+    except:
+        market_state = 'OPEN'
+
+    # yf.download is faster and more reliable than ticker.history for chart data
+    df = yf.download(symbol, period=period, interval=interval,
+                     progress=False, threads=False, auto_adjust=True)
+    chart_data = df['Close'].dropna().tolist() if not df.empty else []
+
     return price, prev_close, currency, market_state, chart_data
 
 def _fetch_usdtry_sync():
     t = yf.Ticker("USDTRY=X")
     return t.fast_info.last_price
 
+def _prewarm_cache(symbols_periods):
+    """Called once at startup in a background thread to pre-fill cache."""
+    for symbol, period, interval in symbols_periods:
+        try:
+            result = _fetch_market_details_sync(symbol, period, interval)
+            cache_key = f"{symbol}|{period}|{interval}"
+            MARKET_DETAILS_CACHE[cache_key] = {
+                "data": {
+                    "symbol": symbol,
+                    "regularMarketPrice": result[0],
+                    "regularMarketPreviousClose": result[1],
+                    "currency": result[2],
+                    "rate": FX_CACHE["USDTRY"],
+                    "chart": result[4],
+                    "marketState": result[3]
+                },
+                "ts": time.time()
+            }
+            print(f"✅ Pre-warmed cache: {symbol}")
+        except Exception as e:
+            print(f"Pre-warm skipped {symbol}: {e}")
+
+# Pre-warm the most common assets in background at startup
+import threading
+threading.Thread(
+    target=_prewarm_cache,
+    args=([
+        ("TRENJ.IS", "1d", "5m"),
+        ("BTC-USD",  "1d", "5m"),
+        ("GC=F",     "1d", "5m"),
+        ("EURTRY=X", "1d", "5m"),
+    ],),
+    daemon=True
+).start()
+
 @app.get("/market/details")
-async def market_details(symbol: str, period: str = "1d", interval: str = "1m"):
+async def market_details(symbol: str, period: str = "1d", interval: str = "5m"):
     cache_key = f"{symbol}|{period}|{interval}"
     now = time.time()
 
-    # Serve from cache if fresh
     cached = MARKET_DETAILS_CACHE.get(cache_key)
     if cached and (now - cached["ts"]) < MARKET_DETAILS_TTL:
         return cached["data"]
 
     try:
         loop = asyncio.get_event_loop()
-
-        # Run yfinance fetch in thread pool (non-blocking)
         price, prev_close, currency, market_state, chart_data = await loop.run_in_executor(
             None, _fetch_market_details_sync, symbol, period, interval
         )
 
-        # Refresh FX rate in background if stale (non-blocking)
+        # Refresh FX rate in background if stale
         if now - FX_CACHE["last_sync"] > 120:
-            try:
-                usdtry = await loop.run_in_executor(None, _fetch_usdtry_sync)
-                FX_CACHE["USDTRY"] = usdtry
-                FX_CACHE["last_sync"] = now
-            except:
-                pass
+            asyncio.create_task(asyncio.get_event_loop().run_in_executor(None, _fetch_usdtry_sync))
 
         usdtry = FX_CACHE["USDTRY"]
 
@@ -980,7 +1019,6 @@ async def market_details(symbol: str, period: str = "1d", interval: str = "1m"):
 
     except Exception as e:
         print(f"Error fetching {symbol}: {e}")
-        # Return cached stale data if available rather than an empty error
         if cached:
             return cached["data"]
         return {"error": str(e), "regularMarketPrice": 0, "rate": 32.95}
