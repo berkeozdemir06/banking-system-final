@@ -917,105 +917,139 @@ async def market_search(q: str):
 # Global FX Cache to speed up details requests
 FX_CACHE = {"USDTRY": 32.95, "last_sync": 0}
 
+# Per-symbol result cache: {symbol+period+interval: {data, ts}}
+MARKET_DETAILS_CACHE = {}
+MARKET_DETAILS_TTL = 60  # seconds
+
+def _fetch_market_details_sync(symbol: str, period: str, interval: str):
+    """Runs in a thread pool — keeps the async event loop free."""
+    ticker = yf.Ticker(symbol)
+    hist = ticker.history(period=period, interval=interval)
+    price = ticker.fast_info.last_price
+    prev_close = ticker.fast_info.previous_close
+    currency = ticker.fast_info.currency
+    market_state = ticker.fast_info.get('market_state', 'OPEN')
+    chart_data = hist['Close'].dropna().tolist()
+    return price, prev_close, currency, market_state, chart_data
+
+def _fetch_usdtry_sync():
+    t = yf.Ticker("USDTRY=X")
+    return t.fast_info.last_price
+
 @app.get("/market/details")
 async def market_details(symbol: str, period: str = "1d", interval: str = "1m"):
+    cache_key = f"{symbol}|{period}|{interval}"
+    now = time.time()
+
+    # Serve from cache if fresh
+    cached = MARKET_DETAILS_CACHE.get(cache_key)
+    if cached and (now - cached["ts"]) < MARKET_DETAILS_TTL:
+        return cached["data"]
+
     try:
-        ticker = yf.Ticker(symbol)
-        # Fetching high-res data for detailed charts
-        hist = ticker.history(period=period, interval=interval)
-        
-        # fast_info for current price and metadata
-        price = ticker.fast_info.last_price
-        prev_close = ticker.fast_info.previous_close
-        currency = ticker.fast_info.currency
-        
-        # Fast USDTRY conversion (cached for performance)
-        curr_time = time.time()
-        if curr_time - FX_CACHE["last_sync"] > 120: # Sync every 2 mins
+        loop = asyncio.get_event_loop()
+
+        # Run yfinance fetch in thread pool (non-blocking)
+        price, prev_close, currency, market_state, chart_data = await loop.run_in_executor(
+            None, _fetch_market_details_sync, symbol, period, interval
+        )
+
+        # Refresh FX rate in background if stale (non-blocking)
+        if now - FX_CACHE["last_sync"] > 120:
             try:
-                usdtry_ticker = yf.Ticker("USDTRY=X")
-                FX_CACHE["USDTRY"] = usdtry_ticker.fast_info.last_price
-                FX_CACHE["last_sync"] = curr_time
-            except: pass
+                usdtry = await loop.run_in_executor(None, _fetch_usdtry_sync)
+                FX_CACHE["USDTRY"] = usdtry
+                FX_CACHE["last_sync"] = now
+            except:
+                pass
+
         usdtry = FX_CACHE["USDTRY"]
-        
-        # Prepare chart data (dropping NaNs and ensuring density)
-        chart_data = hist['Close'].dropna().tolist()
-        
-        return {
+
+        result = {
             "symbol": symbol,
             "regularMarketPrice": price,
             "regularMarketPreviousClose": prev_close,
             "currency": currency,
             "rate": usdtry,
             "chart": chart_data,
-            "marketState": ticker.fast_info.get('market_state', 'OPEN')
+            "marketState": market_state
         }
+
+        MARKET_DETAILS_CACHE[cache_key] = {"data": result, "ts": now}
+        return result
+
     except Exception as e:
         print(f"Error fetching {symbol}: {e}")
+        # Return cached stale data if available rather than an empty error
+        if cached:
+            return cached["data"]
         return {"error": str(e), "regularMarketPrice": 0, "rate": 32.95}
+
+
+MARKET_WATCH_CACHE = {"data": None, "ts": 0}
+MARKET_INDICES_CACHE = {"data": None, "ts": 0}
+
+def _fetch_watch_sync():
+    symbols = ["USDTRY=X", "EURTRY=X", "XAUUSD=L", "BTC-USD"]
+    results = {}
+    for sym in symbols:
+        t = yf.Ticker(sym)
+        price = t.fast_info.last_price
+        prev = t.fast_info.previous_close
+        chg = ((price - prev) / prev) * 100
+        name = sym.replace("=X", "").replace("-USD", "").replace("=L", " GOLD")
+        results[name] = {"price": f"{price:,.2f}", "change": f"{chg:+.2f}%"}
+    return results
 
 @app.get("/market/watch")
 async def market_watch():
-    symbols = ["USDTRY=X", "EURTRY=X", "XAUUSD=L", "BTC-USD"]
+    now = time.time()
+    if MARKET_WATCH_CACHE["data"] and (now - MARKET_WATCH_CACHE["ts"]) < 60:
+        return MARKET_WATCH_CACHE["data"]
     try:
-        results = {}
-        for sym in symbols:
-            t = yf.Ticker(sym)
-            price = t.fast_info.last_price
-            prev = t.fast_info.previous_close
-            chg = ((price - prev) / prev) * 100
-            name = sym.replace("=X", "").replace("-USD", "").replace("=L", " GOLD")
-            results[name] = {"price": f"{price:,.2f}", "change": f"{chg:+.2f}%"}
-        return results
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _fetch_watch_sync)
+        MARKET_WATCH_CACHE["data"] = result
+        MARKET_WATCH_CACHE["ts"] = now
+        return result
     except:
-        return {"USD/TRY": {"price": "32.95", "change": "+0.15%"}}
+        return MARKET_WATCH_CACHE["data"] or {"USD/TRY": {"price": "32.95", "change": "+0.15%"}}
+
+NAME_MAP = {
+    "USDTRY=X": "USD / TRY", "EURTRY=X": "EUR / TRY", "GBPTRY=X": "GBP / TRY",
+    "XAUUSD=L": "GOLD (ONS)", "XAGUSD=L": "SILVER (ONS)", "GC=F": "GOLD FUTURES", "CL=F": "CRUDE OIL"
+}
+
+def _fetch_single_index(sym):
+    ticker = yf.Ticker(sym)
+    hist = ticker.history(period="1d", interval="15m")
+    info = ticker.fast_info
+    price = info.last_price
+    prev_close = info.previous_close
+    change_pct = ((price - prev_close) / prev_close) * 100 if prev_close else 0
+    sparkline = [p for p in hist['Close'].tolist() if p == p][-20:]
+    return {"symbol": sym, "name": NAME_MAP.get(sym, sym), "price": price, "change": change_pct, "sparkline": sparkline}
 
 @app.get("/market/indices")
 async def market_indices():
-    # Forex and Commodities for the Markets page
+    now = time.time()
+    if MARKET_INDICES_CACHE["data"] and (now - MARKET_INDICES_CACHE["ts"]) < 60:
+        return MARKET_INDICES_CACHE["data"]
+
     symbols = ["USDTRY=X", "EURTRY=X", "GBPTRY=X", "XAUUSD=L", "XAGUSD=L", "GC=F", "CL=F"]
-    results = []
-    
-    # We perform sequential fetch for stability, since Yahoo can rate limit concurrent small requests
-    for sym in symbols:
-        try:
-            ticker = yf.Ticker(sym)
-            hist = ticker.history(period="1d", interval="15m")
-            
-            # Use fast_info for real-time prices
-            info = ticker.fast_info
-            price = info.last_price
-            prev_close = info.previous_close
-            change_pct = ((price - prev_close) / prev_close) * 100 if prev_close else 0
-            
-            # Prepare sparkline data (Close prices)
-            sparkline_raw = hist['Close'].tolist()
-            # Basic cleanup: remove NaNs and keep only last 20 points
-            sparkline = [p for p in sparkline_raw if p == p][-20:]
-            
-            # Human readable name mapping
-            name_map = {
-                "USDTRY=X": "USD / TRY",
-                "EURTRY=X": "EUR / TRY",
-                "GBPTRY=X": "GBP / TRY",
-                "XAUUSD=L": "GOLD (ONS)",
-                "XAGUSD=L": "SILVER (ONS)",
-                "GC=F": "GOLD FUTURES",
-                "CL=F": "CRUDE OIL"
-            }
-            
-            results.append({
-                "symbol": sym,
-                "name": name_map.get(sym, sym),
-                "price": price,
-                "change": change_pct,
-                "sparkline": sparkline
-            })
-        except Exception as e:
-            print(f"Index error fetching {sym}: {e}")
-            
-    return results
+    loop = asyncio.get_event_loop()
+
+    # Fetch all symbols in parallel via thread pool
+    tasks = [loop.run_in_executor(None, _fetch_single_index, sym) for sym in symbols]
+    raw = await asyncio.gather(*tasks, return_exceptions=True)
+
+    results = [r for r in raw if isinstance(r, dict)]
+    if results:
+        MARKET_INDICES_CACHE["data"] = results
+        MARKET_INDICES_CACHE["ts"] = now
+    return results or MARKET_INDICES_CACHE.get("data") or []
+
+
 
 # 8. Banking Endpoints
 @app.post("/chat")
