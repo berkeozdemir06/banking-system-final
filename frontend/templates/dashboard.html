@@ -2873,7 +2873,7 @@
                     </div>
                     <div class="input-group" style="margin-bottom:20px;">
                         <div class="input-label" style="font-size:11px; margin-bottom:8px; color:#888; text-transform:uppercase;">Recipient IBAN</div>
-                        <div class="input-box" style="background:#111; border:1px solid #222; border-radius:10px; padding:15px;"><input type="text" id="tr-iban" oninput="validateTransferBtn()" placeholder="TR00 0000 0000..." style="background:transparent; border:none; color:#fff; width:100%; outline:none;"></div>
+                        <div class="input-box" style="background:#111; border:1px solid #222; border-radius:10px; padding:15px;"><input type="text" id="tr-iban" oninput="formatIbanInput(this); validateTransferBtn()" onpaste="handleIbanPaste(event)" placeholder="TR00 0000 0000 0000 0000 00" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" inputmode="text" style="background:transparent; border:none; color:#fff; width:100%; outline:none; font-family:'JetBrains Mono', monospace; letter-spacing:1px;"></div>
                     </div>
                     <div class="input-group" style="margin-bottom:30px;">
                         <div class="input-label" style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:8px; color:#888; text-transform:uppercase;">
@@ -4806,7 +4806,7 @@
             } catch (e) {
                 console.warn("[SYNC] Local polling node latent.", e);
             }
-        }, 2000);
+        }, 5000);
         // --- OZAS System Report Data ---
         (function loadSystemReport() {
             // Live clock
@@ -8468,6 +8468,31 @@
             
             document.getElementById('tab-bank').classList.toggle('active', mode === 'bank');
             document.getElementById('tab-internal').classList.toggle('active', mode === 'internal');
+        }
+
+        function handleIbanPaste(e) {
+            e.preventDefault();
+            const pasted = (e.clipboardData || window.clipboardData).getData('text');
+            // Strip spaces, dashes, dots — keep alphanumeric only, uppercase
+            const clean = pasted.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            const input = document.getElementById('tr-iban');
+            input.value = formatIban(clean);
+            validateTransferBtn();
+        }
+
+        function formatIban(raw) {
+            // Format: TR00 0000 0000 0000 0000 00
+            const clean = raw.replace(/[^A-Z0-9]/g, '');
+            return clean.match(/.{1,4}/g)?.join(' ') || clean;
+        }
+
+        function formatIbanInput(el) {
+            const pos = el.selectionStart;
+            const raw = el.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            const formatted = formatIban(raw);
+            el.value = formatted;
+            // Restore cursor position (accounting for added spaces)
+            try { el.setSelectionRange(pos, pos); } catch(e) {}
         }
 
         function validateTransferBtn() {
