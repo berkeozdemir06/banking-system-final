@@ -2845,6 +2845,13 @@
                         <!-- Injected JS -->
                     </div>
                 </div>
+
+                <div style="margin-bottom: 60px;">
+                    <div class="section-title" style="color:var(--rh-green); font-size:12px; font-weight:900; letter-spacing:3px; margin-bottom: 25px;">GLOBAL BONDS</div>
+                    <div id="grid-global-bonds" style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 24px;">
+                        <!-- Injected JS -->
+                    </div>
+                </div>
             </div>
 
             <!-- TRANSFER VIEW -->
@@ -6515,6 +6522,11 @@
                 { id: 'global_reit', title: 'Global Real Estate Trust', type: 'REIT', yield: '7.10%', risk: 'INCOME', price: 18.25 },
                 { id: 'infra_fund', title: 'Digital Infrastructure REIT', type: 'REIT', yield: '5.85%', risk: 'GROWTH', price: 29.50 },
                 { id: 'green_energy', title: 'Renewable Power Fund', type: 'Impact', yield: '4.30%', risk: 'ESG_CORE', price: 112.40 }
+            ],
+            'global-bonds': [
+                { id: 'yankee_bond', title: 'Yankee Bond (USD)', type: 'Global Bond', yield: '5.10%', risk: 'USD_SOVEREIGN', price: 97.85, desc: 'ABD\'de $ bazlı yabancı tahvil' },
+                { id: 'samurai_bond', title: 'Samurai Bond (JPY)', type: 'Global Bond', yield: '1.20%', risk: 'JPY_SOVEREIGN', price: 99.40, desc: 'Japonya\'da ¥ bazlı yabancı tahvil' },
+                { id: 'matador_bond', title: 'Matador Bond (EUR)', type: 'Global Bond', yield: '3.75%', risk: 'EUR_SOVEREIGN', price: 96.20, desc: 'İspanya\'da € bazlı yabancı tahvil' }
             ]
         };
 
@@ -6532,6 +6544,7 @@
                             <div style="font-size:10px; color:var(--rh-green); font-weight:900;">${inv.risk}</div>
                         </div>
                         <div class="invest-title">${inv.title}</div>
+                        ${inv.desc ? `<div style="font-size:11px; color:var(--text-muted); margin-bottom:8px; margin-top:-6px;">${inv.desc}</div>` : ''}
                         <div style="display:flex; justify-content:space-between; align-items:flex-end;">
                             <div>
                                 <div style="font-size:9px; color:var(--text-muted); font-weight:800; letter-spacing:1px; margin-bottom:2px;">ANNUAL ESTIMATED YIELD</div>
