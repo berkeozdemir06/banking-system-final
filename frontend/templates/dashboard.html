@@ -4782,23 +4782,23 @@
                 if (resp.ok) {
                     const data = await resp.json();
                     if (data && !data.error) {
-                        if (lastKnownBalance !== null && data.balance > lastKnownBalance) {
-                            const diff = data.balance - lastKnownBalance;
+                        const newBalance = data.balance;
+                        // Sync on ANY change (increase OR decrease)
+                        if (lastKnownBalance !== null && Math.abs(newBalance - lastKnownBalance) > 0.01) {
+                            const diff = newBalance - lastKnownBalance;
 
-                            // 🔔 Show the new premium neon banner
+                            // Show banner only when receiving funds
                             if (diff > 0.01) {
                                 showFundsReceivedBanner(diff);
                             }
 
-                            // 💾 Sync state from backend authoritatively
-                            APP_STATE.balance = data.balance;
+                            // Authoritatively sync full state from backend
+                            APP_STATE.balance = newBalance;
                             APP_STATE.ledgerHistory = data.ledgerHistory || APP_STATE.ledgerHistory;
                             APP_STATE.auditHistory = data.auditHistory || APP_STATE.auditHistory;
 
-                            // 🖥️ Update all UI elements aggressively
                             updateGlobalBalances();
                             updateUI();
-
                         }
                         lastKnownBalance = data.balance;
                     }
@@ -8524,7 +8524,7 @@
                 if (currentStep > 3) clearInterval(animTimer);
             }, 700);
 
-            try {
+             try {
                 const resp = await fetch('/transfer/internal', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -8538,20 +8538,22 @@
 
                 const result = await resp.json();
 
-                // Complete step 4
-                const el4 = document.getElementById('step-4');
-                if (el4) el4.classList.add('active');
-
                 if (resp.ok && result.status === 'SUCCESS') {
-                    // Update local state from backend response (authoritative)
+                    // ✅ Update balance IMMEDIATELY — don't wait for animation
                     APP_STATE.balance = result.sender_balance;
                     APP_STATE.ledgerHistory = result.sender_ledger || APP_STATE.ledgerHistory;
-                    pushAdminAudit("TXN", `Transfer sent ${amt} ₺ to ${iban}`, "SUCCESS");
+                    lastKnownBalance = result.sender_balance; // Prevent polling from double-notifying
                     updateGlobalBalances();
                     updateUI();
                     if (APP_STATE.activeMode === 'ledger') renderLedger();
+
+                    // Complete SWIFT step 4 and show success
+                    const el4 = document.getElementById('step-4');
+                    if (el4) el4.classList.add('active');
+                    pushAdminAudit("TXN", `Transfer sent ${amt} ₺ to ${iban}`, "SUCCESS");
                     showNotification(`✅ ${amt.toLocaleString('tr-TR', {minimumFractionDigits:2})} ₺ başarıyla gönderildi!`, "var(--rh-green)");
                 } else {
+                    clearInterval(animTimer);
                     showNotification(`❌ Transfer başarısız: ${result.detail || result.message || 'Bilinmeyen hata'}`, "var(--rh-red)");
                 }
             } catch (e) {
