@@ -1,50 +1,26 @@
-
-# ── API ───────────────────────────────────────────────────
 # ── Core Framework ─────────────────────────────────────────
-# ── Data Extraction ────────────────────────────────────────
-# ── Evaluation ────────────────────────────────────────────
-# ── Guardrails ────────────────────────────────────────────
-# ── LLM & Embeddings ──────────────────────────────────────
-# ── Memory ────────────────────────────────────────────────
-# ── Observability ─────────────────────────────────────────
-# ── Utils ─────────────────────────────────────────────────
-# ── Vector Database ────────────────────────────────────────
-PyJWT==2.8.0
-beautifulsoup4
-chromadb
-cryptography
-deepeval
-dnspython
-docling
 fastapi
-firecrawl-py
-groq
-guardrails-ai
+uvicorn[standard]
+pydantic
+
+# ── HTTP Client ────────────────────────────────────────────
 httpx
 jinja2
-langchain
-langchain-text-splitters
-langchain-chroma
-langchain-community
-langchain-groq
-langchain-nomic
-langfuse
-langsmith
-lxml
-mem0ai
-nomic
-openai
+
+# ── Market Data ────────────────────────────────────────────
+yfinance
 pandas
-pydantic
+
+# ── Auth & Encryption ──────────────────────────────────────
+cryptography
+PyJWT==2.8.0
+
+# ── Database ───────────────────────────────────────────────
 pymongo==4.7.0
+dnspython
+
+# ── Utils ─────────────────────────────────────────────────
 python-dotenv
 python-multipart
-ragas
-requests
-rich
-streamlit
-tqdm
-uvicorn
-yfinance
 reportlab
-playwright
+requests
