@@ -6877,13 +6877,21 @@
 
                 const canvas = document.getElementById('mainChart');
                 if (canvas) {
-                    canvas.style.filter = 'blur(4px) grayscale(0.2)';
-                    canvas.style.opacity = '0.6';
+                    canvas.style.filter = 'none';
+                    canvas.style.opacity = '1';
                 }
-                
-                // Only show loader if it takes > 150ms
+
+                // ⚡ Draw instant simulated chart so canvas is never blank
+                const existingForChart = ASSETS[assetId];
+                if (existingForChart && existingForChart.price > 0) {
+                    const basePrice = existingForChart.price;
+                    const isExistingPos = !String(existingForChart.change || '+').includes('-');
+                    regenerateChart(basePrice, isExistingPos ? '#00C805' : '#ff3333', null, isExistingPos);
+                }
+
+                // Only show loader if backend takes > 300ms (it often won't due to cache)
                 const loader = document.getElementById('search-loading');
-                const loaderTimer = setTimeout(() => { if (loader) loader.style.display = 'block'; }, 150);
+                const loaderTimer = setTimeout(() => { if (loader) loader.style.display = 'block'; }, 300);
 
                 let period = '5d';
                 let interval = '5m';
@@ -6897,6 +6905,7 @@
                 try {
                     const resp = await fetch(`/market/details?symbol=${assetId}&period=${period}&interval=${interval}`);
                     const data = await resp.json();
+
 
                     if (data.error) throw new Error(data.error);
 
