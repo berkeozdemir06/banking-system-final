@@ -349,33 +349,36 @@ async def get_pending_tasks():
 WEBHOOK_SUBSCRIBERS = []
 WEBHOOK_HISTORY = []
 
-async def fire_webhook(event_type: str, payload: dict):
+async def _send_webhook_request(url: str, event_type: str, payload: dict, event_entry: dict):
+    """Fire-and-forget webhook HTTP call — runs in background, never blocks caller."""
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(url, json={"event": event_type, "data": payload},
+                              headers={"Content-Type": "application/json"}, timeout=2.0)
+        event_entry["status"] = "SENT"
+    except Exception:
+        event_entry["status"] = "FAILED"
+
+def fire_webhook(event_type: str, payload: dict):
     """
-    Fires FinTech application-level webhooks (e.g. TransferCreated, AccountDebited)
-    to all dynamically subscribed listener URLs asynchronously.
+    Instantly records the event and dispatches HTTP calls as background tasks.
+    Completely non-blocking — callers never wait for webhook delivery.
     """
     event_entry = {
-        "event": event_type, 
-        "payload": payload, 
+        "event": event_type,
+        "payload": payload,
         "time": datetime.now().isoformat(),
         "status": "QUEUED"
     }
     WEBHOOK_HISTORY.insert(0, event_entry)
     if len(WEBHOOK_HISTORY) > 50: WEBHOOK_HISTORY.pop()
 
-    print(f"📡 WEBHOOK EVENT: {event_type} | Data: {payload}") # Structured Logging (6.1.6.4)
+    print(f"📡 WEBHOOK EVENT: {event_type} | Data: {payload}")
 
     if not WEBHOOK_SUBSCRIBERS: return
-    
-    headers = {"Content-Type": "application/json"}
-    async with httpx.AsyncClient() as client:
-        for url in WEBHOOK_SUBSCRIBERS:
-            try:
-                # Fire and forget strategy
-                asyncio.create_task(client.post(url, json={"event": event_type, "data": payload}, headers=headers, timeout=2.0))
-                event_entry["status"] = "SENT"
-            except Exception: 
-                event_entry["status"] = "FAILED"
+
+    for url in WEBHOOK_SUBSCRIBERS:
+        asyncio.create_task(_send_webhook_request(url, event_type, payload, event_entry))
 
 @app.post("/webhook/subscribe")
 async def subscribe_webhook(req: dict):
@@ -1159,11 +1162,10 @@ async def internal_transfer(req: dict):
         
     receiver = db_data[receiver_tc]
 
-    # 1. Fire TransferCreated Event
+    # 1. Execute atomic dual-ledger update
     tx_id = f"TRX-{int(time.time())}"
-    await fire_webhook("TransferCreated", {"tx_id": tx_id, "amount": amount, "sender": sender_tc, "receiver": receiver_iban})
+    now_iso = datetime.now().isoformat()
 
-    # 2. Sequential Atomic Execution: Debit Sender
     sender["balance"] -= amount
     if "ledgerHistory" not in sender: sender["ledgerHistory"] = []
     sender["ledgerHistory"].insert(0, {
@@ -1173,12 +1175,9 @@ async def internal_transfer(req: dict):
         "credit": 0,
         "move": -amount,
         "balance": sender["balance"],
-        "time": datetime.now().isoformat()
+        "time": now_iso
     })
-    
-    await fire_webhook("AccountDebited", {"tx_id": tx_id, "account": sender_tc, "amount": amount})
-    
-    # 3. Sequential Atomic Execution: Credit Receiver
+
     receiver["balance"] = receiver.get("balance", 0) + amount
     if "ledgerHistory" not in receiver: receiver["ledgerHistory"] = []
     receiver["ledgerHistory"].insert(0, {
@@ -1188,19 +1187,21 @@ async def internal_transfer(req: dict):
         "credit": amount,
         "move": amount,
         "balance": receiver["balance"],
-        "time": datetime.now().isoformat()
+        "time": now_iso
     })
 
-    await fire_webhook("AccountCredited", {"tx_id": tx_id, "account": receiver_tc, "amount": amount})
-
-    # 4. Commit Flat-file ACID Ledger
+    # 2. Persist — non-blocking background write
     save_local_db(db_data)
-    
-    await fire_webhook("TransferCompleted", {"tx_id": tx_id, "status": "SUCCESS"})
-    
+
+    # 3. Fire all webhooks as background tasks — never block the response
+    fire_webhook("TransferCreated",   {"tx_id": tx_id, "amount": amount, "sender": sender_tc, "receiver": receiver_iban})
+    fire_webhook("AccountDebited",    {"tx_id": tx_id, "account": sender_tc, "amount": amount})
+    fire_webhook("AccountCredited",   {"tx_id": tx_id, "account": receiver_tc, "amount": amount})
+    fire_webhook("TransferCompleted", {"tx_id": tx_id, "status": "SUCCESS"})
+
     return {
-        "status": "SUCCESS", 
-        "message": f"Successfully merged {amount:,.2f} ₺ into {receiver_iban}", 
+        "status": "SUCCESS",
+        "message": f"Successfully merged {amount:,.2f} ₺ into {receiver_iban}",
         "sender_balance": sender["balance"],
         "sender_ledger": sender["ledgerHistory"]
     }
