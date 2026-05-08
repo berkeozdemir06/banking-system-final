@@ -298,6 +298,15 @@ def _mongo_sync_worker(full_db):
         except Exception as e:
             print("Mongo Background Sync Error:", e)
 
+def _local_sync_worker(full_db):
+    try:
+        json_str = json.dumps(full_db, indent=4)
+        encrypted_data = cipher_suite.encrypt(json_str.encode())
+        with open(LOCAL_DB_PATH, "wb") as f:
+            f.write(encrypted_data)
+    except Exception as e:
+        print(f"Error saving DB: {e}")
+
 def save_local_db(data: dict):
     import threading
     full_db = {
@@ -308,14 +317,8 @@ def save_local_db(data: dict):
     # 1. Sync Mongo in background — never blocks the caller
     threading.Thread(target=_mongo_sync_worker, args=(full_db,), daemon=True).start()
 
-    # 2. Sync to local encrypted fallback immediately
-    try:
-        json_str = json.dumps(full_db, indent=4)
-        encrypted_data = cipher_suite.encrypt(json_str.encode())
-        with open(LOCAL_DB_PATH, "wb") as f:
-            f.write(encrypted_data)
-    except Exception as e:
-        print(f"Error saving DB: {e}")
+    # 2. Sync to local encrypted fallback in background
+    threading.Thread(target=_local_sync_worker, args=(full_db,), daemon=True).start()
 
 # --- Real-time Session Tracking & Task Queue ---
 USER_HEARTBEATS = {} # {tc: last_seen_timestamp}

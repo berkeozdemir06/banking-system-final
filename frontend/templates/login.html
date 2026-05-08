@@ -1260,14 +1260,14 @@
                                         loaderStatus.style.textShadow = "0 0 20px #fff";
                                     }, 400);
                                 }
-                            }, i * 450); // Optimized Turbo Speed (450ms)
+                            }, i * 150); // Ultra Turbo Speed (150ms)
                         });
 
                         setTimeout(() => {
                             window.location.href = '/dashboard';
-                        }, 2500); // Snappier Redirect (2.5s)
+                        }, 700); // Snappier Redirect (0.7s)
 
-                    }, 600);
+                    }, 200);
                 } else {
                     document.getElementById('captcha-error').style.display = 'block';
                     document.getElementById('captcha-input').style.borderColor = 'red';
