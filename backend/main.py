@@ -959,10 +959,9 @@ MARKET_DETAILS_TTL = 180
 
 def _fetch_market_details_sync(symbol: str, period: str, interval: str):
     """
-    Uses yf.download() for chart data (faster than Ticker.history)
-    and Ticker.fast_info for live price/meta — both in one thread.
+    Fetches price metadata via fast_info and chart data via ticker.history().
+    ticker.history() always returns a clean flat Series — no MultiIndex issues.
     """
-    # fast_info is a single lightweight request
     ticker = yf.Ticker(symbol)
     fi = ticker.fast_info
     price = fi.last_price or 0
@@ -973,10 +972,14 @@ def _fetch_market_details_sync(symbol: str, period: str, interval: str):
     except:
         market_state = 'OPEN'
 
-    # yf.download is faster and more reliable than ticker.history for chart data
-    df = yf.download(symbol, period=period, interval=interval,
-                     progress=False, threads=False, auto_adjust=True)
-    chart_data = df['Close'].dropna().tolist() if not df.empty else []
+    # ticker.history() returns a simple DataFrame — no MultiIndex surprises
+    hist = ticker.history(period=period, interval=interval)
+    if not hist.empty:
+        chart_data = hist['Close'].dropna().tolist()
+        # Ensure all values are plain floats (not numpy types)
+        chart_data = [float(v) for v in chart_data]
+    else:
+        chart_data = []
 
     return price, prev_close, currency, market_state, chart_data
 

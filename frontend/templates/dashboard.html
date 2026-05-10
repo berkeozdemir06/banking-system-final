@@ -7326,7 +7326,7 @@
             chartInst.data.labels = new Array(data.length).fill('').map((_, i) => i);
             chartInst.data.datasets[0].data = data;
             chartInst.data.datasets[0].borderColor = lineColor;
-            chartInst.update('none'); // 'none' = no animation, instant render
+            chartInst.update('none'); // instant for simulated — no flicker
 
             const canvas = document.getElementById('mainChart');
             if (canvas) { canvas.style.filter = 'none'; canvas.style.opacity = '1'; }
