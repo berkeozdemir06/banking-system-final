@@ -195,10 +195,25 @@ except Exception as e:
 global_audit_logs = []
 credit_applications = []
 
+# ─── In-Memory DB Cache ───────────────────────────────────────────────────────
+# Eliminates repeated MongoDB/disk reads on every concurrent request.
+# Invalidated on every write via save_local_db().
+_DB_CACHE: dict = {}
+_DB_CACHE_VALID: bool = False
+
+def _invalidate_db_cache():
+    global _DB_CACHE_VALID
+    _DB_CACHE_VALID = False
+
 def load_local_db() -> dict:
-    global global_audit_logs, credit_applications
+    global global_audit_logs, credit_applications, _DB_CACHE, _DB_CACHE_VALID
+
+    # Serve from in-memory cache if valid
+    if _DB_CACHE_VALID and _DB_CACHE:
+        return _DB_CACHE
+
     full_db = {}
-    
+
     # 1. Try Mongo First
     if USE_MONGO:
         try:
@@ -208,7 +223,7 @@ def load_local_db() -> dict:
         except Exception as e:
             print("Mongo Load Error:", e)
 
-    # 2. Local File Fallback (In Case Mongo times out or is empty)
+    # 2. Local File Fallback
     if not full_db and os.path.exists(LOCAL_DB_PATH):
         try:
             with open(LOCAL_DB_PATH, "rb") as f:
@@ -218,7 +233,7 @@ def load_local_db() -> dict:
                     full_db = json.loads(decrypted_data.decode())
         except Exception:
             pass
-            
+
     db = full_db.get("users") if "users" in full_db else full_db
     if not isinstance(db, dict):
         db = {}
@@ -280,10 +295,13 @@ def load_local_db() -> dict:
     
     # Always ensure test user password is correct
     db[test_tc]["password"] = "0635"
-    
+
     if needs_save:
         save_local_db(db)
-        
+
+    # Populate in-memory cache
+    _DB_CACHE = db
+    _DB_CACHE_VALID = True
     return db
 
 def _mongo_sync_worker(full_db):
@@ -308,16 +326,19 @@ def _local_sync_worker(full_db):
         print(f"Error saving DB: {e}")
 
 def save_local_db(data: dict):
+    global _DB_CACHE, _DB_CACHE_VALID
+    # Update in-memory cache immediately so next read is instant
+    _DB_CACHE = data
+    _DB_CACHE_VALID = True
+
     import threading
     full_db = {
         "users": data,
         "audit_logs": global_audit_logs,
         "credits": credit_applications
     }
-    # 1. Sync Mongo in background — never blocks the caller
+    # Persist to Mongo + local file in background — never blocks caller
     threading.Thread(target=_mongo_sync_worker, args=(full_db,), daemon=True).start()
-
-    # 2. Sync to local encrypted fallback in background
     threading.Thread(target=_local_sync_worker, args=(full_db,), daemon=True).start()
 
 # --- Real-time Session Tracking & Task Queue ---
