@@ -1014,43 +1014,78 @@ def _brownian_chart(anchor: float, n: int = 78, volatility_pct: float = 0.001) -
         chart = [v * scale for v in chart]
     return chart
 
-# Minimum plausible price thresholds — if Yahoo returns below this, data is wrong
-_MIN_PRICE = {
-    ".IS":   100.0,   # BIST stocks: ASELS ~428, THYAO ~~290 etc.
-    "=F":    50.0,    # Futures: Gold ~2500, Oil ~70
-    "-USD":  100.0,   # Crypto: BTC ~90k, ETH ~3k
-    "=X":    0.5,     # FX pairs: USDTRY ~38, EURUSD ~1.0
-    "default": 1.0,
-}
-# Known realistic prices for key demo assets (used as chart anchors when Yahoo fails)
+# Realistic reference prices for all demo assets
+# Used to validate Yahoo Finance responses — if Yahoo returns < 5% of this, it's garbage
 _KNOWN_PRICES = {
-    "ASELS.IS": 428.50,
-    "AAPL":     211.0,
-    "NVDA":     875.0,
-    "TSLA":     175.0,
-    "MSFT":     415.0,
+    # BIST stocks (TRY)
+    "ASELS.IS":  428.50,
+    "THYAO.IS":  290.00,
+    # US stocks (USD)
+    "AAPL":      211.0,
+    "NVDA":      875.0,
+    "TSLA":      175.0,
+    "MSFT":      415.0,
+    # Crypto (USD)
+    "BTC-USD":   93000.0,
+    "ETH-USD":   1800.0,
+    "SOL-USD":   145.0,
+    "BNB-USD":   590.0,
+    # Futures (USD)
+    "GC=F":      3250.0,   # Gold
+    "SI=F":      32.5,     # Silver
+    "CL=F":      62.0,     # Oil
+    "NG=F":      2.1,      # Natural Gas
 }
 
-def _get_min_price(symbol: str) -> float:
-    for suffix, threshold in _MIN_PRICE.items():
-        if symbol.endswith(suffix):
-            return threshold
-    return _MIN_PRICE["default"]
+def _validate_and_build(symbol, meta_price, prev_close_raw, chart_raw, currency, market_state):
+    """
+    Validate Yahoo data against known realistic prices.
+    If Yahoo's best value < 5% of known → treat as corrupt, use known price + Brownian chart.
+    If within 5%-2000% of known → Yahoo is correct, rescale chart to match.
+    If unknown symbol → use Yahoo as-is.
+    """
+    chart_last = chart_raw[-1] if chart_raw else 0
+    best_price = max(meta_price, chart_last)
+    known      = _KNOWN_PRICES.get(symbol)
+
+    if known:
+        lower = known * 0.05
+        upper = known * 20.0
+        if best_price < lower:
+            # Yahoo is way too small — corrupt data from cloud IP
+            print(f"⚠️  {symbol}: Yahoo best={best_price:.4f} < threshold {lower:.1f}. Using known={known}")
+            return known, known * 0.999, currency, market_state, _brownian_chart(known, n=max(len(chart_raw),78))
+        elif best_price > upper:
+            # Yahoo is absurdly large — also bad data
+            print(f"⚠️  {symbol}: Yahoo best={best_price:.2f} > upper {upper:.1f}. Using known={known}")
+            return known, known * 0.999, currency, market_state, _brownian_chart(known, n=max(len(chart_raw),78))
+        else:
+            # Yahoo data looks plausible → use it, rescale chart to match best_price
+            price = best_price
+            prev  = prev_close_raw if prev_close_raw > 0 else price * 0.999
+            if chart_raw and chart_last > 0 and price != chart_last:
+                scale = price / chart_last
+                chart_data = [v * scale for v in chart_raw]
+            else:
+                chart_data = chart_raw or [price]
+            return price, prev, currency, market_state, chart_data
+    else:
+        # Unknown symbol — trust Yahoo as-is
+        price = best_price
+        prev  = prev_close_raw if prev_close_raw > 0 else price * 0.999
+        chart_data = chart_raw or ([price] if price > 0 else [])
+        return price, prev, currency, market_state, chart_data
 
 def _fetch_market_details_sync(symbol: str, period: str, interval: str):
     """
-    Yahoo Finance Chart API + intelligent fallback.
-    - Fetches chart data from Yahoo v8 API.
-    - If the returned price is below the minimum plausible threshold for this
-      asset type, the data is considered corrupt (Yahoo cloud-IP issue).
-    - In that case: use a known realistic price (or chart max) as anchor,
-      and generate a Brownian motion chart around it.
+    Yahoo Finance Chart API with _validate_and_build safety net.
+    All known demo assets have reference prices; any obviously bad Yahoo response
+    is replaced with a Brownian-motion chart around the known realistic value.
     """
     yf_range    = _YF_RANGE.get(period, "1d")
     yf_interval = _YF_INTERVAL.get(interval, "5m")
     url         = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
     params      = {"range": yf_range, "interval": yf_interval, "includePrePost": "false"}
-    min_price   = _get_min_price(symbol)
 
     try:
         with httpx.Client(timeout=12, headers=_YF_HEADERS) as client:
@@ -1064,44 +1099,16 @@ def _fetch_market_details_sync(symbol: str, period: str, interval: str):
         prev_close   = float(meta.get("chartPreviousClose") or meta.get("previousClose") or meta_price)
         currency     = meta.get("currency", "TRY")
         market_state = meta.get("marketState", "OPEN")
+        closes       = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+        chart_raw    = [float(v) for v in closes if v is not None]
 
-        closes     = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
-        chart_raw  = [float(v) for v in closes if v is not None]
-
-        # Determine the best price candidate
-        chart_last = chart_raw[-1] if chart_raw else 0
-        best_price = max(meta_price, chart_last)   # pick whichever is larger (wrong scale is usually smaller)
-
-        if best_price >= min_price:
-            # Data looks plausible — use it
-            price = best_price
-            if chart_last > 0 and price != chart_last:
-                # Rescale chart so last point == price
-                scale = price / chart_last
-                chart_data = [v * scale for v in chart_raw]
-            else:
-                chart_data = chart_raw
-            if meta_price < min_price and chart_last >= min_price:
-                # chart was correct, recalc prev_close from chart start
-                prev_close = chart_data[0] if len(chart_data) > 1 else price
-        else:
-            # Both meta and chart are in wrong scale — use known price or best guess
-            anchor = _KNOWN_PRICES.get(symbol, best_price * 1000 if best_price > 0 else min_price * 2)
-            print(f"⚠️  {symbol}: Yahoo data too small (best={best_price:.4f}, min={min_price}) — using anchor={anchor}")
-            price      = anchor
-            prev_close = anchor * 0.999  # ~0.1% change as placeholder
-            chart_data = _brownian_chart(anchor, n=len(chart_raw) if chart_raw else 78)
+        return _validate_and_build(symbol, meta_price, prev_close, chart_raw, currency, market_state)
 
     except Exception as e:
         print(f"⚠️  Yahoo Chart API error for {symbol}: {e} — using fallback")
-        anchor     = _KNOWN_PRICES.get(symbol, min_price * 2)
-        price      = anchor
-        prev_close = anchor * 0.999
-        currency   = "TRY" if symbol.endswith(".IS") or "TRY" in symbol else "USD"
-        market_state = "CLOSED"
-        chart_data = _brownian_chart(anchor)
-
-    return price, prev_close, currency, market_state, chart_data
+        known    = _KNOWN_PRICES.get(symbol, 1.0)
+        currency = "TRY" if symbol.endswith(".IS") or "TRY" in symbol else "USD"
+        return known, known * 0.999, currency, "CLOSED", _brownian_chart(known)
 
 def _fetch_usdtry_sync():
     t = yf.Ticker("USDTRY=X")
