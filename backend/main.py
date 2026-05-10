@@ -1068,7 +1068,7 @@ import threading
 threading.Thread(
     target=_prewarm_cache,
     args=([
-        ("TRENJ.IS",  "1d", "5m"),
+        ("ASELS.IS",  "1d", "5m"),
         ("BTC-USD",   "1d", "5m"),
         ("GC=F",      "1d", "5m"),
         ("EURTRY=X",  "1d", "5m"),
