@@ -1023,15 +1023,15 @@ def _validate_and_build(symbol, meta_price, prev_close_raw, chart_raw, currency,
     known      = _KNOWN_PRICES.get(symbol)
 
     if known:
-        lower = known * 0.05
-        upper = known * 20.0
+        lower = known * 0.30   # 30% floor — rejects cloud-scaled garbage, allows real bear markets
+        upper = known * 3.00   # 300% ceiling — allows real bull markets, rejects inflated garbage
         if best_price < lower:
             # Yahoo is way too small — corrupt data from cloud IP
-            print(f"⚠️  {symbol}: Yahoo best={best_price:.4f} < threshold {lower:.1f}. Using known={known}")
+            print(f"⚠️  {symbol}: Yahoo best={best_price:.4f} < threshold {lower:.1f}. Using anchor={known}")
             return known, known * 0.999, currency, market_state, _brownian_chart(known, n=max(len(chart_raw),78))
         elif best_price > upper:
             # Yahoo is absurdly large — also bad data
-            print(f"⚠️  {symbol}: Yahoo best={best_price:.2f} > upper {upper:.1f}. Using known={known}")
+            print(f"⚠️  {symbol}: Yahoo best={best_price:.2f} > upper {upper:.1f}. Using anchor={known}")
             return known, known * 0.999, currency, market_state, _brownian_chart(known, n=max(len(chart_raw),78))
         else:
             # Yahoo data looks plausible → use it, rescale chart to match best_price
@@ -1052,37 +1052,62 @@ def _validate_and_build(symbol, meta_price, prev_close_raw, chart_raw, currency,
 
 def _fetch_market_details_sync(symbol: str, period: str, interval: str):
     """
-    Yahoo Finance Chart API with _validate_and_build safety net.
-    All known demo assets have reference prices; any obviously bad Yahoo response
-    is replaced with a Brownian-motion chart around the known realistic value.
+    Dual-source Yahoo fetch:
+      1. v8/finance/chart  → chart shape + meta price
+      2. v7/finance/quote  → live quote price (often more reliable from cloud IPs)
+    Both results are passed through _validate_and_build. Best valid price wins.
+    Falls back to anchor + Brownian chart if both sources are bad.
     """
     yf_range    = _YF_RANGE.get(period, "1d")
     yf_interval = _YF_INTERVAL.get(interval, "5m")
-    url         = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-    params      = {"range": yf_range, "interval": yf_interval, "includePrePost": "false"}
+    chart_url   = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    quote_url   = "https://query2.finance.yahoo.com/v7/finance/quote"
 
+    meta_price   = 0.0
+    prev_close   = 0.0
+    chart_raw    = []
+    currency     = "TRY" if (symbol.endswith(".IS") or "TRY" in symbol) else "USD"
+    market_state = "OPEN"
+
+    # ── Source 1: v8/chart ─────────────────────────────────────────────────
     try:
         with httpx.Client(timeout=12, headers=_YF_HEADERS) as client:
-            resp = client.get(url, params=params)
+            resp = client.get(chart_url, params={"range": yf_range, "interval": yf_interval,
+                                                  "includePrePost": "false"})
             resp.raise_for_status()
-            body = resp.json()
-
-        result       = body["chart"]["result"][0]
-        meta         = result["meta"]
+            body   = resp.json()
+        result   = body["chart"]["result"][0]
+        meta     = result["meta"]
         meta_price   = float(meta.get("regularMarketPrice") or 0)
         prev_close   = float(meta.get("chartPreviousClose") or meta.get("previousClose") or meta_price)
-        currency     = meta.get("currency", "TRY")
+        currency     = meta.get("currency", currency)
         market_state = meta.get("marketState", "OPEN")
         closes       = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
         chart_raw    = [float(v) for v in closes if v is not None]
-
-        return _validate_and_build(symbol, meta_price, prev_close, chart_raw, currency, market_state)
-
     except Exception as e:
-        print(f"⚠️  Yahoo Chart API error for {symbol}: {e} — using fallback")
-        known    = _KNOWN_PRICES.get(symbol, 1.0)
-        currency = "TRY" if symbol.endswith(".IS") or "TRY" in symbol else "USD"
-        return known, known * 0.999, currency, "CLOSED", _brownian_chart(known)
+        print(f"v8/chart error for {symbol}: {e}")
+
+    # ── Source 2: v7/quote (query2, different pool — often unblocked) ──────
+    quote_price = 0.0
+    try:
+        with httpx.Client(timeout=8, headers=_YF_HEADERS) as client:
+            qresp = client.get(quote_url, params={
+                "symbols": symbol,
+                "fields": "regularMarketPrice,regularMarketPreviousClose,currency,marketState"
+            })
+            qdata = qresp.json()["quoteResponse"]["result"][0]
+            quote_price = float(qdata.get("regularMarketPrice") or 0)
+            if prev_close == 0 and quote_price > 0:
+                prev_close   = float(qdata.get("regularMarketPreviousClose") or quote_price)
+            currency     = qdata.get("currency", currency)
+            market_state = qdata.get("marketState", market_state)
+    except Exception as e:
+        print(f"v7/quote error for {symbol}: {e}")
+
+    # ── Pick best candidate and validate ──────────────────────────────────
+    best_price = max(meta_price, quote_price)   # pick whichever is larger (corrupt = tiny)
+    return _validate_and_build(symbol, best_price, prev_close, chart_raw, currency, market_state)
+
 
 def _fetch_usdtry_sync():
     t = yf.Ticker("USDTRY=X")
