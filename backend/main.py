@@ -957,34 +957,59 @@ FX_CACHE = {"USDTRY": 32.95, "last_sync": 0}
 MARKET_DETAILS_CACHE = {}
 MARKET_DETAILS_TTL = 180
 
+# Period → Yahoo Finance range mapping
+_YF_RANGE = {"1d":"1d","1mo":"1mo","3mo":"3mo","6mo":"6mo","1y":"1y","max":"10y"}
+_YF_INTERVAL = {"5m":"5m","60m":"1h","1d":"1d","1wk":"1wk"}
+_YF_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+}
+
 def _fetch_market_details_sync(symbol: str, period: str, interval: str):
     """
-    Price source  : fast_info.last_price      — always the real market price
-    Prev close    : fast_info.previous_close  — real prior-day close
-    Chart data    : history(auto_adjust=False) — raw prices, no dividend distortion
-    Chart is scaled so chart[-1] == fast_info.last_price for perfect alignment.
+    Fetches directly from Yahoo Finance Chart API — same data as the website.
+    regularMarketPrice is the authoritative real-time price (no yfinance distortions).
+    Falls back to yfinance only on HTTP failure.
     """
-    ticker = yf.Ticker(symbol)
-    fi = ticker.fast_info
-    currency = fi.currency or 'TRY'
-    try:    market_state = fi.market_state or 'OPEN'
-    except: market_state = 'OPEN'
+    yf_range    = _YF_RANGE.get(period, "1d")
+    yf_interval = _YF_INTERVAL.get(interval, "5m")
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    params = {"range": yf_range, "interval": yf_interval, "includePrePost": "false"}
 
-    price      = float(fi.last_price      or 0)
-    prev_close = float(fi.previous_close  or price)
+    try:
+        with httpx.Client(timeout=12, headers=_YF_HEADERS) as client:
+            resp  = client.get(url, params=params)
+            resp.raise_for_status()
+            body  = resp.json()
 
-    # auto_adjust=False avoids dividend/split distortions on Turkish stocks
-    hist = ticker.history(period=period, interval=interval, auto_adjust=False)
-    if not hist.empty and 'Close' in hist.columns:
-        raw = [float(v) for v in hist['Close'].dropna().tolist()]
-        if raw and price > 0 and raw[-1] > 0:
-            # Scale so chart[-1] == fast_info.last_price — odometer & chart match exactly
-            scale = price / raw[-1]
-            chart_data = [v * scale for v in raw]
+        result     = body["chart"]["result"][0]
+        meta       = result["meta"]
+        price      = float(meta.get("regularMarketPrice") or meta.get("previousClose") or 0)
+        prev_close = float(meta.get("chartPreviousClose") or meta.get("previousClose") or price)
+        currency   = meta.get("currency", "TRY")
+        market_state = meta.get("marketState", "OPEN")
+
+        closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+        chart_data = [float(v) for v in closes if v is not None]
+
+        # If chart is empty but we have a real price, build a minimal placeholder
+        if not chart_data and price > 0:
+            chart_data = [price]
+
+    except Exception as e:
+        print(f"⚠️  Yahoo Chart API error for {symbol}: {e} — falling back to yfinance")
+        ticker = yf.Ticker(symbol)
+        fi     = ticker.fast_info
+        price      = float(fi.last_price     or 0)
+        prev_close = float(fi.previous_close or price)
+        currency   = fi.currency or "TRY"
+        try:    market_state = fi.market_state or "OPEN"
+        except: market_state = "OPEN"
+        hist = ticker.history(period=period, interval=interval, auto_adjust=False)
+        if not hist.empty and "Close" in hist.columns:
+            chart_data = [float(v) for v in hist["Close"].dropna().tolist()]
         else:
-            chart_data = raw
-    else:
-        chart_data = []
+            chart_data = []
 
     return price, prev_close, currency, market_state, chart_data
 
@@ -997,14 +1022,25 @@ MARKET_PRICE_CACHE = {}
 MARKET_PRICE_TTL = 15
 
 def _fetch_price_only_sync(symbol: str):
-    """Only fast_info — no chart download. Very fast (~0.3s)."""
-    ticker = yf.Ticker(symbol)
-    fi = ticker.fast_info
-    price = fi.last_price or 0
-    prev_close = fi.previous_close or price
-    currency = fi.currency or 'TRY'
-    try:    market_state = fi.market_state or 'OPEN'
-    except: market_state = 'OPEN'
+    """Quick price fetch via Yahoo Chart API meta — same as website price."""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    params = {"range": "1d", "interval": "1m", "includePrePost": "false"}
+    try:
+        with httpx.Client(timeout=8, headers=_YF_HEADERS) as client:
+            resp = client.get(url, params=params)
+            meta = resp.json()["chart"]["result"][0]["meta"]
+        price      = float(meta.get("regularMarketPrice") or 0)
+        prev_close = float(meta.get("chartPreviousClose") or meta.get("previousClose") or price)
+        currency   = meta.get("currency", "TRY")
+        market_state = meta.get("marketState", "OPEN")
+    except Exception:
+        ticker = yf.Ticker(symbol)
+        fi = ticker.fast_info
+        price = float(fi.last_price or 0)
+        prev_close = float(fi.previous_close or price)
+        currency = fi.currency or "TRY"
+        try:    market_state = fi.market_state or "OPEN"
+        except: market_state = "OPEN"
     return price, prev_close, currency, market_state
 
 @app.get("/market/price")
