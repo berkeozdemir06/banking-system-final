@@ -19,6 +19,7 @@ import time
 import jwt
 from collections import defaultdict
 import random
+import re
 
 # Load environment variables from .env file
 load_dotenv()
@@ -1235,23 +1236,25 @@ async def internal_transfer(req: dict):
     if sender.get("balance", 0) < amount:
         raise HTTPException(status_code=400, detail="Insufficient Balance")
 
-    # Locate external IBAN within isolated DB nodes
+    # Locate receiver by IBAN within DB
     receiver_tc = None
+    clean_receiver_iban = re.sub(r'[^A-Z0-9]', '', receiver_iban.upper())
+
     for identifier, profile in db_data.items():
-        # Smart Match: Check for exact IBAN or flexible Admin IBAN match
-        clean_receiver_iban = receiver_iban.replace(" ", "").upper()
-        profile_iban = profile.get("iban", "").replace(" ", "").upper()
-        
-        is_exact_match = (profile_iban == clean_receiver_iban)
-        is_flexible_admin_match = (clean_receiver_iban.endswith("ADMIN") and identifier == "11111111110")
-        
-        if (is_exact_match or is_flexible_admin_match) and identifier != sender_tc:
-            receiver_profile = profile
+        if not isinstance(profile, dict): continue
+        profile_iban = re.sub(r'[^A-Z0-9]', '', profile.get("iban", "").upper())
+
+        is_exact_match    = (profile_iban == clean_receiver_iban)
+        # Flexible match: any IBAN ending with ADMIN goes to the "admin" system account
+        is_admin_match    = (clean_receiver_iban.endswith("ADMIN") and identifier == "admin")
+
+        if (is_exact_match or is_admin_match) and identifier != sender_tc:
             receiver_tc = identifier
             break
-            
+
     if not receiver_tc:
         raise HTTPException(status_code=404, detail="Destination IBAN is Invalid or Unregistered.")
+
         
     receiver = db_data[receiver_tc]
 
