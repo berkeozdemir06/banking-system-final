@@ -997,7 +997,7 @@ def _compute_eurtry_sync(period: str, interval: str):
             prev_close = float(eu.previous_close or eurusd) * float(us.previous_close or usdtry)
         except Exception as e2:
             print(f"yfinance fallback error: {e2}")
-            price, prev_close = 43.0, 42.8   # last-resort hardcoded value
+            price, prev_close = 53.29, 53.17   # last-resort hardcoded value
 
     chart = _brownian_chart(price, n=78, volatility_pct=0.0008)
     return price, prev_close, "TRY", "OPEN", chart
@@ -1014,24 +1014,27 @@ def _brownian_chart(anchor: float, n: int = 78, volatility_pct: float = 0.001) -
         chart = [v * scale for v in chart]
     return chart
 
-# Realistic reference prices for all demo assets (May 2026 approximate values)
+# Realistic reference prices for all demo assets (May 2026 — sourced from user screenshots)
 # Used to validate Yahoo Finance responses — if Yahoo returns < 5% of this, it's garbage
 _KNOWN_PRICES = {
     # BIST stocks (TRY) — do not change ASELS
     "ASELS.IS":  428.50,
     "THYAO.IS":  290.00,
+    # FX pairs (TRY) — values = TRY per 1 foreign unit
+    "EURTRY=X":  53.29,
+    "USDTRY=X":  38.50,
     # US stocks (USD)
     "AAPL":      211.0,
     "NVDA":      115.0,
     "TSLA":      250.0,
     "MSFT":      415.0,
     # Crypto (USD)
-    "BTC-USD":   93500.0,
+    "BTC-USD":   81577.0,
     "ETH-USD":   1800.0,
     "SOL-USD":   148.0,
     "BNB-USD":   605.0,
     # Futures (USD)
-    "GC=F":      3250.0,   # Gold
+    "GC=F":      4697.80,  # Gold Jun 26
     "SI=F":      32.8,     # Silver
     "CL=F":      62.0,     # Oil (WTI)
     "NG=F":      3.5,      # Natural Gas
