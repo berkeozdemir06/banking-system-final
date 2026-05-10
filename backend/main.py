@@ -968,9 +968,28 @@ _YF_HEADERS = {
 def _fetch_market_details_sync(symbol: str, period: str, interval: str):
     """
     Fetches from Yahoo Finance Chart API.
-    For BIST stocks, meta.regularMarketPrice can return a wrong scale value.
-    We cross-check against chart data and use chart[-1] when meta is inconsistent.
+    Special cases:
+    - EURTRY=X / GBPTRY=X: computed from cross-pairs (avoids Yahoo EURTRY data bug)
+    - BIST (.IS): chart data is authoritative (meta returns wrong scale)
+    - Others: meta price is authoritative, chart data is rescaled to match
     """
+    # --- Special case: cross-TRY pairs computed from base pairs ---
+    if symbol in ("EURTRY=X", "GBPTRY=X", "JPYTRY=X"):
+        base_sym = symbol.replace("TRY=X", "USD=X")   # e.g. EURUSD=X
+        usdtry_price, usdtry_prev, _, ms1, usdtry_chart = _fetch_market_details_sync("USDTRY=X", period, interval)
+        baseusd_price, baseusd_prev, _, ms2, baseusd_chart = _fetch_market_details_sync(base_sym, period, interval)
+        price      = (baseusd_price or 1) * (usdtry_price or 1)
+        prev_close = (baseusd_prev  or 1) * (usdtry_prev  or 1)
+        currency   = "TRY"
+        market_state = ms1
+        # Build chart as product of both chart series (align by length)
+        n = min(len(usdtry_chart), len(baseusd_chart))
+        if n > 0:
+            chart_data = [usdtry_chart[i] * baseusd_chart[i] for i in range(n)]
+        else:
+            chart_data = [price]
+        return price, prev_close, currency, market_state, chart_data
+
     yf_range    = _YF_RANGE.get(period, "1d")
     yf_interval = _YF_INTERVAL.get(interval, "5m")
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
