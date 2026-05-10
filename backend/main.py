@@ -1104,14 +1104,14 @@ import threading
 threading.Thread(
     target=_prewarm_cache,
     args=([
-        ("ASELS.IS",  "1d", "5m"),
-        ("BTC-USD",   "1d", "5m"),
-        ("GC=F",      "1d", "5m"),
-        ("EURTRY=X",  "1d", "5m"),
-        ("ETH-USD",   "1d", "5m"),
-        ("AAPL",      "1d", "5m"),
-        ("USDTRY=X",  "1d", "5m"),
-        ("CL=F",      "1d", "5m"),
+        ("AAPL",    "1d", "5m"),
+        ("NVDA",    "1d", "5m"),
+        ("TSLA",    "1d", "5m"),
+        ("MSFT",    "1d", "5m"),
+        ("BTC-USD", "1d", "5m"),
+        ("ETH-USD", "1d", "5m"),
+        ("GC=F",    "1d", "5m"),
+        ("CL=F",    "1d", "5m"),
     ],),
     daemon=True
 ).start()

@@ -5162,18 +5162,17 @@
         }
 
         const ASSETS = {
-            'ASELS.IS': { id: 'ASELS.IS', type: 'stock', title: 'ASELS.IS', price: 0, change: '0.00', pct: '0.00%' },
-            'THYAO.IS': { id: 'THYAO.IS', type: 'stock', title: 'Turkish Airlines', price: 0, change: '0.00', pct: '0.00%' },
-            'BTC-USD': { id: 'BTC-USD', type: 'crypto', title: 'Bitcoin', price: 0, change: '0.00', pct: '0.00%' },
-            'GC=F': { id: 'GC=F', type: 'futures', title: 'Gold Futures (3M)', price: 0, change: '0.00', pct: '0.00%' },
-            'SI=F': { id: 'SI=F', type: 'futures', title: 'Silver Derivatives', price: 0, change: '0.00', pct: '0.00%' },
-            'CL=F': { id: 'CL=F', type: 'futures', title: 'Brent Oil Futures', price: 0, change: '0.00', pct: '0.00%' },
-            'USDTRY=X': { id: 'USDTRY=X', type: 'futures', title: 'USD/TRY FX Pair', price: 0, change: '0.00', pct: '0.00%' },
-            'EURUSD=X': { id: 'EURUSD=X', type: 'futures', title: 'EUR/USD FX Pair', price: 0, change: '0.00', pct: '0.00%' },
-            'bist100': { id: 'bist100', type: 'stock', title: 'BIST 100', price: 9120.45, change: '+142.10', pct: '+1.58%' },
-            'sp500': { id: 'sp500', type: 'stock', title: 'S&P 500 Index', price: 162350.50, change: '+850.20', pct: '+0.52%' },
-            'eth': { id: 'eth', type: 'crypto', title: 'Ethereum', price: 110500.00, change: '+2500.00', pct: '+2.3%' },
-            'sol': { id: 'sol', type: 'crypto', title: 'Solana', price: 4200.50, change: '+150.00', pct: '+3.7%' }
+            'AAPL':   { id: 'AAPL',   type: 'stock', title: 'Apple Inc.',       price: 0, change: '0.00', pct: '0.00%' },
+            'NVDA':   { id: 'NVDA',   type: 'stock', title: 'NVIDIA Corp.',      price: 0, change: '0.00', pct: '0.00%' },
+            'TSLA':   { id: 'TSLA',   type: 'stock', title: 'Tesla Inc.',        price: 0, change: '0.00', pct: '0.00%' },
+            'MSFT':   { id: 'MSFT',   type: 'stock', title: 'Microsoft Corp.',   price: 0, change: '0.00', pct: '0.00%' },
+            'BTC-USD':{ id: 'BTC-USD',type: 'crypto', title: 'Bitcoin',          price: 0, change: '0.00', pct: '0.00%' },
+            'ETH-USD':{ id: 'ETH-USD',type: 'crypto', title: 'Ethereum',         price: 0, change: '0.00', pct: '0.00%' },
+            'GC=F':   { id: 'GC=F',   type: 'futures', title: 'Gold Futures',    price: 0, change: '0.00', pct: '0.00%' },
+            'SI=F':   { id: 'SI=F',   type: 'futures', title: 'Silver Futures',  price: 0, change: '0.00', pct: '0.00%' },
+            'CL=F':   { id: 'CL=F',   type: 'futures', title: 'Oil Futures',     price: 0, change: '0.00', pct: '0.00%' },
+            'USDTRY=X':{ id: 'USDTRY=X', type: 'futures', title: 'USD/TRY',     price: 0, change: '0.00', pct: '0.00%' },
+            'EURUSD=X':{ id: 'EURUSD=X', type: 'futures', title: 'EUR/USD',     price: 0, change: '0.00', pct: '0.00%' },
         };
 
         let chartInst = null;
@@ -6342,8 +6341,8 @@
                 }
                 document.getElementById('list-title').innerText = titleMap[mode];
 
-                const defaultTickers = { 'stocks': 'ASELS.IS', 'crypto': 'BTC-USD', 'futures': 'GC=F', 'markets': 'EURTRY=X' };
-                let defaultTicker = defaultTickers[mode] || 'ASELS.IS';
+                const defaultTickers = { 'stocks': 'AAPL', 'crypto': 'BTC-USD', 'futures': 'GC=F', 'markets': 'EURTRY=X' };
+                let defaultTicker = defaultTickers[mode] || 'AAPL';
                 
                 hideSection('section-fx-secondary');
                 hideSection('section-asset-list');
