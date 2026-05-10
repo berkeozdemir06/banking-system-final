@@ -6853,7 +6853,7 @@
                     const isPositive = !asset.change.includes('-');
                     const chgClass = isPositive ? 'color-green' : 'color-red';
                     const row = document.createElement('tr');
-                    row.onclick = () => loadAsset(id);
+                    row.onclick = () => loadAsset(id, true); // isReal=true to fetch live data
                     row.style.transition = 'all 0.3s ease';
                     
                     row.innerHTML = `
@@ -6966,15 +6966,22 @@
                     const tryRate = data.rate || 32.95;
                     const title = data.symbol || assetId;
 
-                    const isCrypto = (currencyCode === 'BTC' || currencyCode === 'ETH' || currencyCode === 'USD' || title.includes('-USD') || title.includes('=X'));
-                    const displayInUsd = isCrypto; // User requested crypto in USD
+                    // FX TRY pairs (EURTRY=X, USDTRY=X) already return price in TRY — no conversion
+                    const isFXTRYPair = assetId.includes('TRY=X');
+                    // Only -USD crypto pairs show in $
+                    const isCryptoUSD = assetId.includes('-USD');
+                    const isCrypto = isCryptoUSD;
+                    const displayInUsd = isCryptoUSD;
 
-                    const conversionRate = (displayInUsd ? 1 : (currencyCode === 'USD' || currencyCode === 'EUR' || title.includes('=X') || title.includes('-USD') ? tryRate : 1));
+                    // Convert USD-denominated assets to TRY unless displaying in USD
+                    const needsConversion = !displayInUsd && !isFXTRYPair && (currencyCode === 'USD' || currencyCode === 'EUR');
+                    const conversionRate = needsConversion ? tryRate : 1;
+                    const symbol = displayInUsd ? '$' : '₺';
+
                     const currentPrice = rawPrice * conversionRate;
                     const prevClose = rawPrev * conversionRate;
                     const diff = currentPrice - prevClose;
                     const pctDiff = prevClose !== 0 ? (diff / prevClose) * 100 : 0;
-                    const symbol = displayInUsd ? '$' : '₺';
 
                     ASSETS[assetId] = {
                         id: assetId,
@@ -7326,7 +7333,7 @@
             chartInst.data.labels = new Array(data.length).fill('').map((_, i) => i);
             chartInst.data.datasets[0].data = data;
             chartInst.data.datasets[0].borderColor = lineColor;
-            chartInst.update('none'); // instant for simulated — no flicker
+            chartInst.update(); // animated — shows smooth transition between assets
 
             const canvas = document.getElementById('mainChart');
             if (canvas) { canvas.style.filter = 'none'; canvas.style.opacity = '1'; }
