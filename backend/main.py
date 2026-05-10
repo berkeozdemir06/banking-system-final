@@ -968,56 +968,9 @@ _YF_HEADERS = {
 def _fetch_market_details_sync(symbol: str, period: str, interval: str):
     """
     Fetches from Yahoo Finance Chart API.
-    Special cases:
-    - EURTRY=X / GBPTRY=X: computed from cross-pairs (avoids Yahoo EURTRY data bug)
-    - BIST (.IS): chart data is authoritative (meta returns wrong scale)
-    - Others: meta price is authoritative, chart data is rescaled to match
+    For BIST stocks, meta.regularMarketPrice can return a wrong scale value.
+    We cross-check against chart data and use chart[-1] when meta is inconsistent.
     """
-    # --- Special case: cross-TRY pairs computed from base pairs ---
-    if symbol in ("EURTRY=X", "GBPTRY=X", "JPYTRY=X"):
-        base_sym = symbol.replace("TRY=X", "USD=X")   # e.g. EURUSD=X
-        usdtry_price, usdtry_prev, _, ms1, usdtry_chart = _fetch_market_details_sync("USDTRY=X", period, interval)
-        baseusd_price, baseusd_prev, _, ms2, baseusd_chart = _fetch_market_details_sync(base_sym, period, interval)
-        price      = (baseusd_price or 1) * (usdtry_price or 1)
-        prev_close = (baseusd_prev  or 1) * (usdtry_prev  or 1)
-        currency   = "TRY"
-        market_state = ms1
-        # Build chart as product of both chart series (align by length)
-        n = min(len(usdtry_chart), len(baseusd_chart))
-        if n > 0:
-            chart_data = [usdtry_chart[i] * baseusd_chart[i] for i in range(n)]
-        else:
-            chart_data = [price]
-        return price, prev_close, currency, market_state, chart_data
-
-    # --- FX pairs (=X suffix): yfinance fast_info is reliable for exchange rates ---
-    # Yahoo Chart API v8 returns wrong data for FX from cloud IPs; fast_info works correctly.
-    if symbol.endswith("=X"):
-        try:
-            ticker = yf.Ticker(symbol)
-            fi = ticker.fast_info
-            price      = float(fi.last_price      or 0)
-            prev_close = float(fi.previous_close  or price)
-            currency   = fi.currency or "TRY"
-            try:    market_state = fi.market_state or "OPEN"
-            except: market_state = "OPEN"
-            # Get chart via history (raw, no adjustment)
-            hist = ticker.history(period=period, interval=interval, auto_adjust=False)
-            if not hist.empty and "Close" in hist.columns:
-                raw = [float(v) for v in hist["Close"].dropna().tolist()]
-                # Scale chart so last point matches fast_info price
-                if raw and raw[-1] > 0 and price > 0:
-                    scale = price / raw[-1]
-                    chart_data = [v * scale for v in raw]
-                else:
-                    chart_data = raw
-            else:
-                chart_data = [price]
-        except Exception as e:
-            print(f"⚠️  FX yfinance error for {symbol}: {e}")
-            price, prev_close, currency, market_state, chart_data = 0, 0, "TRY", "OPEN", []
-        return price, prev_close, currency, market_state, chart_data
-
     yf_range    = _YF_RANGE.get(period, "1d")
     yf_interval = _YF_INTERVAL.get(interval, "5m")
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
@@ -1039,29 +992,20 @@ def _fetch_market_details_sync(symbol: str, period: str, interval: str):
         closes     = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
         chart_data = [float(v) for v in closes if v is not None]
 
-        # Smart price/chart reconciliation:
-        # - BIST stocks (.IS): Yahoo meta price is wrong scale; chart data is correct
-        # - FX pairs / futures / US stocks: Yahoo meta price is correct; chart may be wrong scale
-        is_bist = symbol.endswith(".IS")
+        # Sanity check: if meta price is >50% off from chart data, trust the chart
         if chart_data:
             chart_last = chart_data[-1]
             if chart_last > 0 and meta_price > 0:
                 ratio = max(meta_price, chart_last) / min(meta_price, chart_last)
                 if ratio > 1.5:
-                    if is_bist:
-                        # BIST: trust chart — meta returns dividend-adjusted/wrong price
-                        print(f"⚠️  {symbol} (BIST): chart_last={chart_last:.2f} used over meta_price={meta_price:.4f}")
-                        meta_price = chart_last
-                        prev_close = chart_data[0] if len(chart_data) > 1 else chart_last
-                    else:
-                        # Non-BIST: trust meta — rescale chart so chart[-1] == meta_price
-                        print(f"⚠️  {symbol}: meta_price={meta_price:.4f} used, chart rescaled from {chart_last:.2f}")
-                        scale = meta_price / chart_last
-                        chart_data = [v * scale for v in chart_data]
+                    # Meta price scale is wrong — use chart values as authoritative
+                    print(f"⚠️  {symbol}: meta_price={meta_price} vs chart_last={chart_last} (ratio={ratio:.1f}) — using chart values")
+                    meta_price = chart_last
+                    prev_close = chart_data[0] if len(chart_data) > 1 else chart_last
             price = meta_price if meta_price > 0 else (chart_last if chart_last > 0 else 0)
         else:
             price = meta_price
-            if price > 0:
+            if not chart_data and price > 0:
                 chart_data = [price]
 
     except Exception as e:
@@ -1090,22 +1034,7 @@ MARKET_PRICE_CACHE = {}
 MARKET_PRICE_TTL = 15
 
 def _fetch_price_only_sync(symbol: str):
-    """Quick price fetch. FX pairs use yfinance (reliable); others use Yahoo Chart API."""
-    # FX pairs: yfinance fast_info is reliable for exchange rates
-    if symbol.endswith("=X"):
-        try:
-            fi = yf.Ticker(symbol).fast_info
-            price      = float(fi.last_price     or 0)
-            prev_close = float(fi.previous_close or price)
-            currency   = fi.currency or "TRY"
-            try:    market_state = fi.market_state or "OPEN"
-            except: market_state = "OPEN"
-            return price, prev_close, currency, market_state
-        except Exception as e:
-            print(f"⚠️  FX fast_info error {symbol}: {e}")
-            return 0, 0, "TRY", "OPEN"
-
-    # Non-FX: use Yahoo Chart API meta
+    """Quick price fetch via Yahoo Chart API meta — same as website price."""
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
     params = {"range": "1d", "interval": "1m", "includePrePost": "false"}
     try:
@@ -1117,7 +1046,8 @@ def _fetch_price_only_sync(symbol: str):
         currency   = meta.get("currency", "TRY")
         market_state = meta.get("marketState", "OPEN")
     except Exception:
-        fi = yf.Ticker(symbol).fast_info
+        ticker = yf.Ticker(symbol)
+        fi = ticker.fast_info
         price = float(fi.last_price or 0)
         prev_close = float(fi.previous_close or price)
         currency = fi.currency or "TRY"
