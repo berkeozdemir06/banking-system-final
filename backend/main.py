@@ -992,20 +992,29 @@ def _fetch_market_details_sync(symbol: str, period: str, interval: str):
         closes     = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
         chart_data = [float(v) for v in closes if v is not None]
 
-        # Sanity check: if meta price is >50% off from chart data, trust the chart
+        # Smart price/chart reconciliation:
+        # - BIST stocks (.IS): Yahoo meta price is wrong scale; chart data is correct
+        # - FX pairs / futures / US stocks: Yahoo meta price is correct; chart may be wrong scale
+        is_bist = symbol.endswith(".IS")
         if chart_data:
             chart_last = chart_data[-1]
             if chart_last > 0 and meta_price > 0:
                 ratio = max(meta_price, chart_last) / min(meta_price, chart_last)
                 if ratio > 1.5:
-                    # Meta price scale is wrong — use chart values as authoritative
-                    print(f"⚠️  {symbol}: meta_price={meta_price} vs chart_last={chart_last} (ratio={ratio:.1f}) — using chart values")
-                    meta_price = chart_last
-                    prev_close = chart_data[0] if len(chart_data) > 1 else chart_last
+                    if is_bist:
+                        # BIST: trust chart — meta returns dividend-adjusted/wrong price
+                        print(f"⚠️  {symbol} (BIST): chart_last={chart_last:.2f} used over meta_price={meta_price:.4f}")
+                        meta_price = chart_last
+                        prev_close = chart_data[0] if len(chart_data) > 1 else chart_last
+                    else:
+                        # Non-BIST: trust meta — rescale chart so chart[-1] == meta_price
+                        print(f"⚠️  {symbol}: meta_price={meta_price:.4f} used, chart rescaled from {chart_last:.2f}")
+                        scale = meta_price / chart_last
+                        chart_data = [v * scale for v in chart_data]
             price = meta_price if meta_price > 0 else (chart_last if chart_last > 0 else 0)
         else:
             price = meta_price
-            if not chart_data and price > 0:
+            if price > 0:
                 chart_data = [price]
 
     except Exception as e:
