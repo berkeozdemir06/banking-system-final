@@ -1014,27 +1014,27 @@ def _brownian_chart(anchor: float, n: int = 78, volatility_pct: float = 0.001) -
         chart = [v * scale for v in chart]
     return chart
 
-# Realistic reference prices for all demo assets
+# Realistic reference prices for all demo assets (May 2026 approximate values)
 # Used to validate Yahoo Finance responses — if Yahoo returns < 5% of this, it's garbage
 _KNOWN_PRICES = {
-    # BIST stocks (TRY)
+    # BIST stocks (TRY) — do not change ASELS
     "ASELS.IS":  428.50,
     "THYAO.IS":  290.00,
     # US stocks (USD)
     "AAPL":      211.0,
-    "NVDA":      875.0,
-    "TSLA":      175.0,
+    "NVDA":      115.0,
+    "TSLA":      250.0,
     "MSFT":      415.0,
     # Crypto (USD)
-    "BTC-USD":   93000.0,
+    "BTC-USD":   93500.0,
     "ETH-USD":   1800.0,
-    "SOL-USD":   145.0,
-    "BNB-USD":   590.0,
+    "SOL-USD":   148.0,
+    "BNB-USD":   605.0,
     # Futures (USD)
     "GC=F":      3250.0,   # Gold
-    "SI=F":      32.5,     # Silver
-    "CL=F":      62.0,     # Oil
-    "NG=F":      2.1,      # Natural Gas
+    "SI=F":      32.8,     # Silver
+    "CL=F":      62.0,     # Oil (WTI)
+    "NG=F":      3.5,      # Natural Gas
 }
 
 def _validate_and_build(symbol, meta_price, prev_close_raw, chart_raw, currency, market_state):

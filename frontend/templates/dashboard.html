@@ -6968,10 +6968,11 @@
 
                     // FX TRY pairs (EURTRY=X, USDTRY=X) already return price in TRY — no conversion
                     const isFXTRYPair = assetId.includes('TRY=X');
-                    // Only -USD crypto pairs show in $
-                    const isCryptoUSD = assetId.includes('-USD');
-                    const isCrypto = isCryptoUSD;
-                    const displayInUsd = isCryptoUSD;
+                    // Crypto (-USD) and Futures (=F) both display in $
+                    const isCryptoUSD  = assetId.includes('-USD');
+                    const isFuturesUSD = assetId.endsWith('=F');
+                    const isCrypto     = isCryptoUSD;
+                    const displayInUsd = isCryptoUSD || isFuturesUSD;
 
                     // Convert USD-denominated assets to TRY unless displaying in USD
                     const needsConversion = !displayInUsd && !isFXTRYPair && (currencyCode === 'USD' || currencyCode === 'EUR');
