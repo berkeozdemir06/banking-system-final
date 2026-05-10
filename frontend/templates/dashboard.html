@@ -7030,24 +7030,20 @@
 
                     if (cleanQuotes.length > 5) {
                         const lineColor = isPos ? '#00C805' : '#ff3333';
-
                         chartInst.data.labels = new Array(cleanQuotes.length).fill('').map((_, i) => i);
                         chartInst.data.datasets[0].data = cleanQuotes;
                         chartInst.data.datasets[0].borderColor = lineColor;
-                        chartInst.update();
+                        chartInst.update(); // animate the real data arrival
                     } else {
-                        // Empty real data fallback to mock but keep symbol info
-                        const isPos = diff >= 0;
                         const lineColor = isPos ? '#00C805' : '#ff3333';
                         regenerateChart(currentPrice, lineColor, null, isPos);
                     }
 
-                    // ALWAYS restoration after attempt
+                    // Hide loader, restore canvas
+                    const loader = document.getElementById('search-loading');
+                    if (loader) loader.style.display = 'none';
                     const canvas = document.getElementById('mainChart');
-                    if (canvas) {
-                        canvas.style.filter = 'none';
-                        canvas.style.opacity = '1';
-                    }
+                    if (canvas) { canvas.style.filter = 'none'; canvas.style.opacity = '1'; }
 
                     updateAIAdvisor(assetId);
                     updateMarketStatusUI(data.marketState, ASSETS[assetId]?.type);
