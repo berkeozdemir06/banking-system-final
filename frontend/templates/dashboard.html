@@ -5162,6 +5162,7 @@
         }
 
         const ASSETS = {
+            'ASELS.IS':{ id: 'ASELS.IS', type: 'stock', title: 'Aselsan A.S.',    price: 0, change: '0.00', pct: '0.00%' },
             'AAPL':   { id: 'AAPL',   type: 'stock', title: 'Apple Inc.',       price: 0, change: '0.00', pct: '0.00%' },
             'NVDA':   { id: 'NVDA',   type: 'stock', title: 'NVIDIA Corp.',      price: 0, change: '0.00', pct: '0.00%' },
             'TSLA':   { id: 'TSLA',   type: 'stock', title: 'Tesla Inc.',        price: 0, change: '0.00', pct: '0.00%' },
@@ -6341,8 +6342,8 @@
                 }
                 document.getElementById('list-title').innerText = titleMap[mode];
 
-                const defaultTickers = { 'stocks': 'AAPL', 'crypto': 'BTC-USD', 'futures': 'GC=F', 'markets': 'EURTRY=X' };
-                let defaultTicker = defaultTickers[mode] || 'AAPL';
+                const defaultTickers = { 'stocks': 'ASELS.IS', 'crypto': 'BTC-USD', 'futures': 'GC=F', 'markets': 'EURTRY=X' };
+                let defaultTicker = defaultTickers[mode] || 'ASELS.IS';
                 
                 hideSection('section-fx-secondary');
                 hideSection('section-asset-list');

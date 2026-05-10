@@ -967,9 +967,9 @@ _YF_HEADERS = {
 
 def _fetch_market_details_sync(symbol: str, period: str, interval: str):
     """
-    Fetches directly from Yahoo Finance Chart API — same data as the website.
-    regularMarketPrice is the authoritative real-time price (no yfinance distortions).
-    Falls back to yfinance only on HTTP failure.
+    Fetches from Yahoo Finance Chart API.
+    For BIST stocks, meta.regularMarketPrice can return a wrong scale value.
+    We cross-check against chart data and use chart[-1] when meta is inconsistent.
     """
     yf_range    = _YF_RANGE.get(period, "1d")
     yf_interval = _YF_INTERVAL.get(interval, "5m")
@@ -982,19 +982,31 @@ def _fetch_market_details_sync(symbol: str, period: str, interval: str):
             resp.raise_for_status()
             body  = resp.json()
 
-        result     = body["chart"]["result"][0]
-        meta       = result["meta"]
-        price      = float(meta.get("regularMarketPrice") or meta.get("previousClose") or 0)
-        prev_close = float(meta.get("chartPreviousClose") or meta.get("previousClose") or price)
-        currency   = meta.get("currency", "TRY")
+        result       = body["chart"]["result"][0]
+        meta         = result["meta"]
+        meta_price   = float(meta.get("regularMarketPrice") or 0)
+        prev_close   = float(meta.get("chartPreviousClose") or meta.get("previousClose") or meta_price)
+        currency     = meta.get("currency", "TRY")
         market_state = meta.get("marketState", "OPEN")
 
-        closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+        closes     = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
         chart_data = [float(v) for v in closes if v is not None]
 
-        # If chart is empty but we have a real price, build a minimal placeholder
-        if not chart_data and price > 0:
-            chart_data = [price]
+        # Sanity check: if meta price is >50% off from chart data, trust the chart
+        if chart_data:
+            chart_last = chart_data[-1]
+            if chart_last > 0 and meta_price > 0:
+                ratio = max(meta_price, chart_last) / min(meta_price, chart_last)
+                if ratio > 1.5:
+                    # Meta price scale is wrong — use chart values as authoritative
+                    print(f"⚠️  {symbol}: meta_price={meta_price} vs chart_last={chart_last} (ratio={ratio:.1f}) — using chart values")
+                    meta_price = chart_last
+                    prev_close = chart_data[0] if len(chart_data) > 1 else chart_last
+            price = meta_price if meta_price > 0 else (chart_last if chart_last > 0 else 0)
+        else:
+            price = meta_price
+            if not chart_data and price > 0:
+                chart_data = [price]
 
     except Exception as e:
         print(f"⚠️  Yahoo Chart API error for {symbol}: {e} — falling back to yfinance")
@@ -1104,6 +1116,7 @@ import threading
 threading.Thread(
     target=_prewarm_cache,
     args=([
+        ("ASELS.IS", "1d", "5m"),
         ("AAPL",    "1d", "5m"),
         ("NVDA",    "1d", "5m"),
         ("TSLA",    "1d", "5m"),
