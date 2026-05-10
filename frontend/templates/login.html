@@ -1243,7 +1243,7 @@
                             logContainer.prepend(line);
                         }
 
-                        // Rolling Step Sequence
+                        // Rolling Step Sequence — 700ms per letter so the 1.2s CSS easing is visible
                         const steps = [
                             { t: "ENCRYPTING USER IDENTITY", p: 20, l: "Generating AES-256 Master Key...", rollIdx: 0 },
                             { t: "SECURING ASSETS", p: 45, l: "Wrapping ledger data in SHA-512... OK", rollIdx: 1 },
@@ -1262,22 +1262,21 @@
                                 if(s.rollIdx !== -1) {
                                     columns[s.rollIdx].style.transform = `translateY(-${15 * 160}px)`;
                                 }
-
-                                // Handle Final State Transformation
-                                if(s.p === 100) {
-                                    setTimeout(() => {
-                                        loaderStatus.style.letterSpacing = "10px";
-                                        loaderStatus.style.color = "#ffffff";
-                                        loaderStatus.innerText = "SUCCESSFUL";
-                                        loaderStatus.style.textShadow = "0 0 20px #fff";
-                                    }, 400);
-                                }
-                            }, i * 150); // Ultra Turbo Speed (150ms)
+                            }, i * 700); // 700ms per letter — lets the 1.2s CSS easing be seen
                         });
 
+                        // Show SUCCESSFUL once all 4 letters have settled (~3.5s)
+                        setTimeout(() => {
+                            loaderStatus.style.letterSpacing = "10px";
+                            loaderStatus.style.color = "#ffffff";
+                            loaderStatus.innerText = "SUCCESSFUL";
+                            loaderStatus.style.textShadow = "0 0 20px #fff";
+                        }, 3500);
+
+                        // Redirect after OZAS is fully displayed (~5.5s total)
                         setTimeout(() => {
                             window.location.href = '/dashboard';
-                        }, 700); // Snappier Redirect (0.7s)
+                        }, 5500);
 
                     }, 200);
                 } else {
