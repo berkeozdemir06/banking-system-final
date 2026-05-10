@@ -959,9 +959,9 @@ MARKET_DETAILS_TTL = 180
 
 def _fetch_market_details_sync(symbol: str, period: str, interval: str):
     """
-    Uses ticker.history() for both chart data and price.
-    The last chart value is the authoritative current price — ensures
-    the odometer and chart always match exactly.
+    Current price  = last chart point          (matches what chart draws)
+    Previous close = fast_info.previous_close  (real prior-day close, not intraday open)
+    This gives accurate daily change% without open-to-close distortion.
     """
     ticker = yf.Ticker(symbol)
     fi = ticker.fast_info
@@ -969,17 +969,17 @@ def _fetch_market_details_sync(symbol: str, period: str, interval: str):
     try:    market_state = fi.market_state or 'OPEN'
     except: market_state = 'OPEN'
 
-    # ticker.history() — clean flat DataFrame, no MultiIndex
+    prev_close_raw = fi.previous_close or 0
+
     hist = ticker.history(period=period, interval=interval)
     if not hist.empty:
         chart_data = [float(v) for v in hist['Close'].dropna().tolist()]
-        # Use last/first chart points as price — consistent with what's drawn
-        price      = chart_data[-1] if chart_data else (fi.last_price or 0)
-        prev_close = chart_data[0]  if len(chart_data) > 1 else (fi.previous_close or price)
+        price = chart_data[-1] if chart_data else (fi.last_price or 0)
     else:
         chart_data = []
-        price      = fi.last_price or 0
-        prev_close = fi.previous_close or price
+        price = fi.last_price or 0
+
+    prev_close = prev_close_raw if prev_close_raw > 0 else price
 
     return price, prev_close, currency, market_state, chart_data
 
