@@ -2871,6 +2871,15 @@
                         <div class="input-label" style="font-size:11px; margin-bottom:8px; color:#888; text-transform:uppercase;">Recipient Name</div>
                         <div class="input-box" style="background:#111; border:1px solid #222; border-radius:10px; padding:15px;"><input type="text" id="tr-name" oninput="validateTransferBtn()" placeholder="Name Surname" style="background:transparent; border:none; color:#fff; width:100%; outline:none;"></div>
                     </div>
+
+                    <!-- ⚡ Quick Contacts — tap to auto-fill IBAN -->
+                    <div style="margin-bottom:20px;">
+                        <div class="input-label" style="font-size:11px; margin-bottom:10px; color:#888; text-transform:uppercase;">Quick Select Account</div>
+                        <div id="quick-contacts" style="display:flex; flex-direction:column; gap:8px;">
+                            <div style="color:#555; font-size:12px;">Loading accounts...</div>
+                        </div>
+                    </div>
+
                     <div class="input-group" style="margin-bottom:20px;">
                         <div class="input-label" style="font-size:11px; margin-bottom:8px; color:#888; text-transform:uppercase;">Recipient IBAN</div>
                         <div class="input-box" style="background:#111; border:1px solid #222; border-radius:10px; padding:15px;"><input type="text" id="tr-iban" oninput="formatIbanInput(this); validateTransferBtn()" onpaste="handleIbanPaste(event)" placeholder="TR00 0000 0000 0000 0000 00" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" inputmode="text" style="background:transparent; border:none; color:#fff; width:100%; outline:none; font-family:'JetBrains Mono', monospace; letter-spacing:1px;"></div>
@@ -6117,6 +6126,55 @@
             document.getElementById('tab-web3').classList.toggle('active', mode === 'web3');
         }
 
+        async function loadQuickContacts() {
+            const container = document.getElementById('quick-contacts');
+            if (!container) return;
+            try {
+                const resp = await fetch('/contacts/list');
+                if (!resp.ok) throw new Error();
+                const contacts = await resp.json();
+                // Filter out self
+                const others = contacts.filter(c => c.tc !== APP_STATE.tc_identity);
+                if (!others.length) {
+                    container.innerHTML = '<div style="color:#555;font-size:12px;">No other accounts found.</div>';
+                    return;
+                }
+                container.innerHTML = others.map(c => `
+                    <div onclick="selectContact('${c.full_name}','${c.iban}')"
+                         style="display:flex; align-items:center; gap:12px; padding:12px 14px;
+                                background:#111; border:1px solid #222; border-radius:10px;
+                                cursor:pointer; transition:border-color 0.2s;"
+                         onmouseenter="this.style.borderColor='#444'"
+                         onmouseleave="this.style.borderColor='#222'">
+                        <div style="width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#00C805,#0088ff);
+                                    display:flex; align-items:center; justify-content:center;
+                                    font-weight:700; font-size:15px; color:#000; flex-shrink:0;">
+                            ${c.full_name.trim().charAt(0).toUpperCase()}
+                        </div>
+                        <div style="overflow:hidden;">
+                            <div style="color:#fff; font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${c.full_name}</div>
+                            <div style="color:#555; font-size:11px; font-family:monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${c.iban}</div>
+                        </div>
+                        <div style="margin-left:auto; color:#00C805; font-size:18px;">→</div>
+                    </div>
+                `).join('');
+            } catch(e) {
+                container.innerHTML = '<div style="color:#555;font-size:12px;">Could not load accounts.</div>';
+            }
+        }
+
+        function selectContact(name, iban) {
+            document.getElementById('tr-name').value = name;
+            const ibanInput = document.getElementById('tr-iban');
+            ibanInput.value = formatIban(iban.replace(/[^A-Z0-9]/gi, '').toUpperCase());
+            validateTransferBtn();
+            // Visual feedback
+            document.querySelectorAll('#quick-contacts > div').forEach(el => {
+                el.style.borderColor = '#222';
+            });
+            showNotification(`✅ ${name} selected`, '#00C805');
+        }
+
         async function connectWallet() {
             if (window.ethereum) {
                 try {
@@ -6304,7 +6362,8 @@
                 if (mode === 'investments') initInvestments();
                 if (mode === 'transfer') {
                     const swiftTracker = document.getElementById('swift-tracker');
-                    if (swiftTracker) swiftTracker.style.display = 'none'; // Reset tracker
+                    if (swiftTracker) swiftTracker.style.display = 'none';
+                    loadQuickContacts();
                 }
                 if (mode === 'account') {
                     renderHistory();

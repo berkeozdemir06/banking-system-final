@@ -921,6 +921,20 @@ async def get_system_state(tc_identity: str):
     }
 
 # 7. Market Data Proxy (Using yfinance for robustness)
+@app.get("/contacts/list")
+async def list_contacts():
+    """Returns registered accounts for the Transfer Quick Select feature."""
+    db_data = load_local_db()
+    contacts = []
+    for tc, profile in db_data.items():
+        if not isinstance(profile, dict): continue
+        if profile.get("status", "ACTIVE") != "ACTIVE": continue
+        iban = profile.get("iban", "")
+        name = profile.get("full_name", tc)
+        if iban and name:
+            contacts.append({"tc": tc, "full_name": name, "iban": iban})
+    return contacts
+
 @app.get("/market/search")
 async def market_search(q: str):
     headers = {"User-Agent": "Mozilla/5.0"}
