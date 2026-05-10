@@ -1310,19 +1310,101 @@ async def market_indices():
 # 8. Banking Endpoints
 @app.post("/chat")
 async def chat_endpoint(req: dict):
-    user_msg = req.get("message", "").lower()
-    tc = req.get("tc_identity", "unknown")
-    db_data = load_local_db()
+    raw_msg  = req.get("message", "")
+    user_msg = raw_msg.lower()
+    tc       = req.get("tc_identity", "unknown")
+    db_data  = load_local_db()
     user_state = db_data.get(tc, {})
-    balance = user_state.get("balance", 0)
-    
-    if "balance" in user_msg or "bakiye" in user_msg:
-        res = f"Bakiye analizi yapıldı: Mevcut bakiyeniz {balance:,.2f} ₺. Portföyünüz stabil görünüyor."
-    elif "selam" in user_msg or "merhaba" in user_msg:
-        res = "Merhaba! Ben OZAS Assistant. Size nasıl yardımcı olabilirim?"
-    else:
-        res = "Anladım. Başka bir konuda yardımcı olmamı ister misiniz? (Bakiye, Transfer vb.)"
-    return {"reply": res}
+    balance    = user_state.get("balance", 0)
+
+    # ── Asset symbol map ─────────────────────────────────────────────────────
+    ASSET_MAP = [
+        # BIST stocks
+        (["asels","aselsan"],             "ASELS.IS", "stocks",  "Aselsan A.Ş."),
+        (["thyao","türk hava","thy"],      "THYAO.IS", "stocks",  "Türk Hava Yolları"),
+        # US stocks
+        (["aapl","apple"],                 "AAPL",     "stocks",  "Apple Inc."),
+        (["nvda","nvidia"],                "NVDA",     "stocks",  "NVIDIA"),
+        (["tsla","tesla"],                 "TSLA",     "stocks",  "Tesla"),
+        (["msft","microsoft"],             "MSFT",     "stocks",  "Microsoft"),
+        # Crypto
+        (["btc","bitcoin"],                "BTC-USD",  "crypto",  "Bitcoin"),
+        (["eth","ethereum"],               "ETH-USD",  "crypto",  "Ethereum"),
+        (["sol","solana"],                 "SOL-USD",  "crypto",  "Solana"),
+        (["bnb","binance"],                "BNB-USD",  "crypto",  "BNB"),
+        # Futures
+        (["gold","altın","gc"],            "GC=F",     "futures", "Gold Futures"),
+        (["silver","gümüş","si"],          "SI=F",     "futures", "Silver Futures"),
+        (["oil","petrol","cl","brent"],    "CL=F",     "futures", "Crude Oil"),
+        (["ng","natural gas","doğalgaz"],  "NG=F",     "futures", "Natural Gas"),
+        # FX / Markets
+        (["eur","euro","eurtry"],          "EURTRY=X", "markets", "EUR/TRY"),
+        (["usd","dolar","usdtry"],         "USDTRY=X", "markets", "USD/TRY"),
+    ]
+
+    # ── Mode navigation map ───────────────────────────────────────────────────
+    MODE_MAP = [
+        (["stocks","hisse","borsa","bist"],      "stocks"),
+        (["crypto","kripto","bitcoin market"],   "crypto"),
+        (["futures","vadeli","kaldıraç","gold market","commodity"], "futures"),
+        (["markets","piyasa","fx","döviz"],      "markets"),
+        (["portfolio","portföy","hesabım"],      "portfolio"),
+        (["account","hesap","bakiye"],           "account"),
+    ]
+
+    reply  = ""
+    action = None
+
+    # 1. Check for asset intent
+    for keywords, symbol, mode, label in ASSET_MAP:
+        if any(k in user_msg for k in keywords):
+            known = _KNOWN_PRICES.get(symbol, 0)
+            price_str = f"${known:,.2f}" if mode in ("crypto","futures") or symbol in ("AAPL","NVDA","TSLA","MSFT") else f"{known:,.2f}₺"
+            reply  = (f"📊 {label} verisi yükleniyor. "
+                      f"Referans fiyat: {price_str}. "
+                      f"Güncel veri için {mode.capitalize()} sekmesini açıyorum...")
+            action = {"type": "navigate_asset", "symbol": symbol, "mode": mode}
+            break
+
+    # 2. Check for mode navigation
+    if not action:
+        for keywords, mode in MODE_MAP:
+            if any(k in user_msg for k in keywords):
+                mode_labels = {"stocks":"Stocks","crypto":"Crypto","futures":"Futures","markets":"Markets","portfolio":"Portfolio","account":"Account"}
+                reply  = f"🔀 {mode_labels.get(mode,mode)} sekmesine yönlendiriliyorsunuz..."
+                action = {"type": "navigate_mode", "mode": mode}
+                break
+
+    # 3. Balance query
+    if not action and any(k in user_msg for k in ["balance","bakiye","para","hesabım ne kadar","ne kadar param"]):
+        reply  = f"💰 Mevcut bakiyeniz: **{balance:,.2f} ₺**. Portföyünüz stabil görünüyor."
+        action = None
+
+    # 4. Transfer intent
+    if not action and any(k in user_msg for k in ["transfer","havale","eft","gönder","send money"]):
+        reply  = "🏦 Transfer sayfasına yönlendiriliyorsunuz..."
+        action = {"type": "navigate_mode", "mode": "transfer"}
+
+    # 5. Greetings
+    if not reply:
+        if any(k in user_msg for k in ["selam","merhaba","hi","hello","hey"]):
+            reply = ("👋 Merhaba! Ben OZAS Assistant. Size şunları yapabilirim:\n"
+                     "• **Varlık Yükleme** — \"Show me Bitcoin\", \"ASELS fiyatı\"\n"
+                     "• **Sekme Geçişi** — \"Go to Crypto\", \"Futures aç\"\n"
+                     "• **Bakiye** — \"Bakiyem ne kadar?\"\n"
+                     "• **Transfer** — \"Transfer yapmak istiyorum\"")
+        elif any(k in user_msg for k in ["help","yardım","ne yapabilirsin","what can you do"]):
+            reply = ("🤖 OZAS Assistant komutları:\n"
+                     "• Bitcoin / ASELS / Gold / EUR → ilgili varlığı yükler\n"
+                     "• Stocks / Crypto / Futures / Markets → sekme değiştirir\n"
+                     "• Bakiye → güncel bakiyeyi gösterir\n"
+                     "• Transfer → havale sayfasını açar")
+        else:
+            reply = ("Anlayamadım. \"Bitcoin\", \"ASELS\", \"Gold\" gibi bir varlık adı "
+                     "veya \"Stocks\", \"Crypto\", \"Bakiye\" gibi bir komut deneyebilirsiniz.")
+
+    return {"reply": reply, "action": action}
+
 
 @app.post("/loans/apply")
 async def apply_loan(req: dict):

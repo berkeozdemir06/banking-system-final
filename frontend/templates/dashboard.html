@@ -5906,9 +5906,45 @@
                 const data = await response.json();
                 const res = data.reply || "I am sorry, I cannot respond at the moment.";
 
-                history.innerHTML += `<div style="margin-top:8px; color:#fff;">OZAS Assistant: ${res}</div>`;
+                // Render reply (convert \n to <br>)
+                const formattedRes = res.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                history.innerHTML += `<div style="margin-top:10px; color:#fff; line-height:1.6;">${formattedRes}</div>`;
                 history.scrollTop = history.scrollHeight;
                 if (window.pushAuditLog) pushAuditLog("AI", "AI response received.");
+
+                // ── Execute action ───────────────────────────────────────────
+                const act = data.action;
+                if (act) {
+                    setTimeout(() => {
+                        // Close the assistant panel first
+                        const panel = document.getElementById('support-panel');
+                        if (panel) panel.style.display = 'none';
+
+                        if (act.type === 'navigate_asset') {
+                            // Find the nav link for this mode and click it
+                            const navLinks = document.querySelectorAll('.navbar .nav-link');
+                            navLinks.forEach(el => {
+                                if (el.getAttribute('onclick') && el.getAttribute('onclick').includes(`'${act.mode}'`)) {
+                                    el.click();
+                                }
+                            });
+                            // Load the asset after mode switch settles
+                            setTimeout(() => {
+                                if (typeof loadAsset === 'function') {
+                                    loadAsset(act.symbol, true);
+                                }
+                            }, 400);
+
+                        } else if (act.type === 'navigate_mode') {
+                            const navLinks = document.querySelectorAll('.navbar .nav-link');
+                            navLinks.forEach(el => {
+                                if (el.getAttribute('onclick') && el.getAttribute('onclick').includes(`'${act.mode}'`)) {
+                                    el.click();
+                                }
+                            });
+                        }
+                    }, 800);
+                }
             } catch (error) {
                 history.innerHTML += `<div style="margin-top:8px; color:var(--rh-red);">Error: Failed to connect to server.</div>`;
             }
