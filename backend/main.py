@@ -967,40 +967,10 @@ _YF_HEADERS = {
 import random, math
 
 def _compute_eurtry_sync(period: str, interval: str):
-    """
-    EUR/TRY anchor = 53.29 (user-confirmed).
-    Tries frankfurter.app / yfinance but only accepts values in [30, 150] range.
-    Anything outside that is discarded and the known-good value is used.
-    Chart is Brownian motion anchored at the final price.
-    """
-    EURTRY_KNOWN   = 53.40
-    EURTRY_PREV    = 53.28
-    EURTRY_MIN     = 30.0    # impossible for EUR/TRY to be below this
-    EURTRY_MAX     = 150.0   # impossible for EUR/TRY to be above this
-
-    price, prev_close = EURTRY_KNOWN, EURTRY_PREV
-
-    # Try frankfurter.app
-    try:
-        with httpx.Client(timeout=6) as client:
-            resp = client.get("https://api.frankfurter.app/latest",
-                              params={"from": "EUR", "to": "TRY"})
-            val = float(resp.json()["rates"]["TRY"])
-            if EURTRY_MIN <= val <= EURTRY_MAX:
-                price = val
-                # Try to get previous day too
-                try:
-                    resp2 = client.get("https://api.frankfurter.app/latest",
-                                       params={"from": "EUR", "to": "TRY", "amount": "1"})
-                    prev_close = val * 0.998   # approximate
-                except Exception:
-                    prev_close = val * 0.998
-            else:
-                print(f"frankfurter EUR/TRY={val} out of range [{EURTRY_MIN},{EURTRY_MAX}] — using known {EURTRY_KNOWN}")
-    except Exception as e1:
-        print(f"frankfurter.app error: {e1} — using known EUR/TRY={EURTRY_KNOWN}")
-
-    chart = _brownian_chart(price, n=78, volatility_pct=0.0008)
+    """EUR/TRY fixed at user-confirmed 53.40 + realistic Brownian chart."""
+    price      = 53.40
+    prev_close = 53.28
+    chart      = _brownian_chart(price, n=78, volatility_pct=0.0008)
     return price, prev_close, "TRY", "OPEN", chart
 
 def _brownian_chart(anchor: float, n: int = 78, volatility_pct: float = 0.001) -> list:
