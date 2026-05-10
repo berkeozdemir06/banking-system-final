@@ -973,8 +973,8 @@ def _compute_eurtry_sync(period: str, interval: str):
     Anything outside that is discarded and the known-good value is used.
     Chart is Brownian motion anchored at the final price.
     """
-    EURTRY_KNOWN   = 53.29
-    EURTRY_PREV    = 53.17
+    EURTRY_KNOWN   = 53.40
+    EURTRY_PREV    = 53.28
     EURTRY_MIN     = 30.0    # impossible for EUR/TRY to be below this
     EURTRY_MAX     = 150.0   # impossible for EUR/TRY to be above this
 
@@ -1022,7 +1022,7 @@ _KNOWN_PRICES = {
     "ASELS.IS":  428.50,
     "THYAO.IS":  290.00,
     # FX pairs (TRY) — values = TRY per 1 foreign unit
-    "EURTRY=X":  53.29,
+    "EURTRY=X":  53.40,
     "USDTRY=X":  38.50,
     # US stocks (USD)
     "AAPL":      211.0,
