@@ -1265,18 +1265,18 @@
                             }, i * 700); // 700ms per letter — lets the 1.2s CSS easing be seen
                         });
 
-                        // Show SUCCESSFUL once all 4 letters have settled (~3.5s)
+                        // Show SUCCESSFUL once all 4 letters have settled (~3.2s)
                         setTimeout(() => {
                             loaderStatus.style.letterSpacing = "10px";
                             loaderStatus.style.color = "#ffffff";
                             loaderStatus.innerText = "SUCCESSFUL";
                             loaderStatus.style.textShadow = "0 0 20px #fff";
-                        }, 3500);
+                        }, 3200);
 
-                        // Redirect after OZAS is fully displayed (~5.5s total)
+                        // Redirect ~1s after SUCCESSFUL
                         setTimeout(() => {
                             window.location.href = '/dashboard';
-                        }, 5500);
+                        }, 4200);
 
                     }, 200);
                 } else {
