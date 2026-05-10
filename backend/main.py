@@ -1215,7 +1215,10 @@ async def market_details(symbol: str, period: str = "1d", interval: str = "5m"):
 
         # Refresh FX rate in background if stale
         if now - FX_CACHE["last_sync"] > 120:
-            asyncio.create_task(asyncio.get_event_loop().run_in_executor(None, _fetch_usdtry_sync))
+            async def _bg_usdtry():
+                loop2 = asyncio.get_event_loop()
+                await loop2.run_in_executor(None, _fetch_usdtry_sync)
+            asyncio.create_task(_bg_usdtry())
 
         usdtry = FX_CACHE["USDTRY"]
 
