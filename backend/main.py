@@ -959,9 +959,10 @@ MARKET_DETAILS_TTL = 180
 
 def _fetch_market_details_sync(symbol: str, period: str, interval: str):
     """
-    Current price  = last chart point          (matches what chart draws)
-    Previous close = fast_info.previous_close  (real prior-day close, not intraday open)
-    This gives accurate daily change% without open-to-close distortion.
+    Price source  : fast_info.last_price      — always the real market price
+    Prev close    : fast_info.previous_close  — real prior-day close
+    Chart data    : history(auto_adjust=False) — raw prices, no dividend distortion
+    Chart is scaled so chart[-1] == fast_info.last_price for perfect alignment.
     """
     ticker = yf.Ticker(symbol)
     fi = ticker.fast_info
@@ -969,17 +970,21 @@ def _fetch_market_details_sync(symbol: str, period: str, interval: str):
     try:    market_state = fi.market_state or 'OPEN'
     except: market_state = 'OPEN'
 
-    prev_close_raw = fi.previous_close or 0
+    price      = float(fi.last_price      or 0)
+    prev_close = float(fi.previous_close  or price)
 
-    hist = ticker.history(period=period, interval=interval)
-    if not hist.empty:
-        chart_data = [float(v) for v in hist['Close'].dropna().tolist()]
-        price = chart_data[-1] if chart_data else (fi.last_price or 0)
+    # auto_adjust=False avoids dividend/split distortions on Turkish stocks
+    hist = ticker.history(period=period, interval=interval, auto_adjust=False)
+    if not hist.empty and 'Close' in hist.columns:
+        raw = [float(v) for v in hist['Close'].dropna().tolist()]
+        if raw and price > 0 and raw[-1] > 0:
+            # Scale so chart[-1] == fast_info.last_price — odometer & chart match exactly
+            scale = price / raw[-1]
+            chart_data = [v * scale for v in raw]
+        else:
+            chart_data = raw
     else:
         chart_data = []
-        price = fi.last_price or 0
-
-    prev_close = prev_close_raw if prev_close_raw > 0 else price
 
     return price, prev_close, currency, market_state, chart_data
 
