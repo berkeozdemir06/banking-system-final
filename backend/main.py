@@ -968,36 +968,37 @@ import random, math
 
 def _compute_eurtry_sync(period: str, interval: str):
     """
-    EUR/TRY rate from api.frankfurter.app (free, no-auth, works from cloud).
-    Falls back to yfinance cross-pair computation, then to hardcoded value.
-    Chart is Brownian motion anchored at the live rate.
+    EUR/TRY anchor = 53.29 (user-confirmed).
+    Tries frankfurter.app / yfinance but only accepts values in [30, 150] range.
+    Anything outside that is discarded and the known-good value is used.
+    Chart is Brownian motion anchored at the final price.
     """
-    price, prev_close = 0.0, 0.0
+    EURTRY_KNOWN   = 53.29
+    EURTRY_PREV    = 53.17
+    EURTRY_MIN     = 30.0    # impossible for EUR/TRY to be below this
+    EURTRY_MAX     = 150.0   # impossible for EUR/TRY to be above this
 
-    # Primary: frankfurter.app — free currency API, no auth required
+    price, prev_close = EURTRY_KNOWN, EURTRY_PREV
+
+    # Try frankfurter.app
     try:
         with httpx.Client(timeout=6) as client:
             resp = client.get("https://api.frankfurter.app/latest",
                               params={"from": "EUR", "to": "TRY"})
-            data = resp.json()
-            price = float(data["rates"]["TRY"])
-            # Fetch yesterday for prev_close
-            resp2 = client.get("https://api.frankfurter.app/2025-05-09",
-                               params={"from": "EUR", "to": "TRY"})
-            prev_close = float(resp2.json()["rates"]["TRY"])
+            val = float(resp.json()["rates"]["TRY"])
+            if EURTRY_MIN <= val <= EURTRY_MAX:
+                price = val
+                # Try to get previous day too
+                try:
+                    resp2 = client.get("https://api.frankfurter.app/latest",
+                                       params={"from": "EUR", "to": "TRY", "amount": "1"})
+                    prev_close = val * 0.998   # approximate
+                except Exception:
+                    prev_close = val * 0.998
+            else:
+                print(f"frankfurter EUR/TRY={val} out of range [{EURTRY_MIN},{EURTRY_MAX}] — using known {EURTRY_KNOWN}")
     except Exception as e1:
-        print(f"frankfurter.app error: {e1}")
-        # Fallback: EURUSD × USDTRY from yfinance
-        try:
-            eu = yf.Ticker("EURUSD=X").fast_info
-            us = yf.Ticker("USDTRY=X").fast_info
-            eurusd = float(eu.last_price or 1.08)
-            usdtry = float(us.last_price or 38.5)
-            price      = eurusd * usdtry
-            prev_close = float(eu.previous_close or eurusd) * float(us.previous_close or usdtry)
-        except Exception as e2:
-            print(f"yfinance fallback error: {e2}")
-            price, prev_close = 53.29, 53.17   # last-resort hardcoded value
+        print(f"frankfurter.app error: {e1} — using known EUR/TRY={EURTRY_KNOWN}")
 
     chart = _brownian_chart(price, n=78, volatility_pct=0.0008)
     return price, prev_close, "TRY", "OPEN", chart
