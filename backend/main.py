@@ -990,6 +990,34 @@ def _fetch_market_details_sync(symbol: str, period: str, interval: str):
             chart_data = [price]
         return price, prev_close, currency, market_state, chart_data
 
+    # --- FX pairs (=X suffix): yfinance fast_info is reliable for exchange rates ---
+    # Yahoo Chart API v8 returns wrong data for FX from cloud IPs; fast_info works correctly.
+    if symbol.endswith("=X"):
+        try:
+            ticker = yf.Ticker(symbol)
+            fi = ticker.fast_info
+            price      = float(fi.last_price      or 0)
+            prev_close = float(fi.previous_close  or price)
+            currency   = fi.currency or "TRY"
+            try:    market_state = fi.market_state or "OPEN"
+            except: market_state = "OPEN"
+            # Get chart via history (raw, no adjustment)
+            hist = ticker.history(period=period, interval=interval, auto_adjust=False)
+            if not hist.empty and "Close" in hist.columns:
+                raw = [float(v) for v in hist["Close"].dropna().tolist()]
+                # Scale chart so last point matches fast_info price
+                if raw and raw[-1] > 0 and price > 0:
+                    scale = price / raw[-1]
+                    chart_data = [v * scale for v in raw]
+                else:
+                    chart_data = raw
+            else:
+                chart_data = [price]
+        except Exception as e:
+            print(f"⚠️  FX yfinance error for {symbol}: {e}")
+            price, prev_close, currency, market_state, chart_data = 0, 0, "TRY", "OPEN", []
+        return price, prev_close, currency, market_state, chart_data
+
     yf_range    = _YF_RANGE.get(period, "1d")
     yf_interval = _YF_INTERVAL.get(interval, "5m")
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
@@ -1062,7 +1090,22 @@ MARKET_PRICE_CACHE = {}
 MARKET_PRICE_TTL = 15
 
 def _fetch_price_only_sync(symbol: str):
-    """Quick price fetch via Yahoo Chart API meta — same as website price."""
+    """Quick price fetch. FX pairs use yfinance (reliable); others use Yahoo Chart API."""
+    # FX pairs: yfinance fast_info is reliable for exchange rates
+    if symbol.endswith("=X"):
+        try:
+            fi = yf.Ticker(symbol).fast_info
+            price      = float(fi.last_price     or 0)
+            prev_close = float(fi.previous_close or price)
+            currency   = fi.currency or "TRY"
+            try:    market_state = fi.market_state or "OPEN"
+            except: market_state = "OPEN"
+            return price, prev_close, currency, market_state
+        except Exception as e:
+            print(f"⚠️  FX fast_info error {symbol}: {e}")
+            return 0, 0, "TRY", "OPEN"
+
+    # Non-FX: use Yahoo Chart API meta
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
     params = {"range": "1d", "interval": "1m", "includePrePost": "false"}
     try:
@@ -1074,8 +1117,7 @@ def _fetch_price_only_sync(symbol: str):
         currency   = meta.get("currency", "TRY")
         market_state = meta.get("marketState", "OPEN")
     except Exception:
-        ticker = yf.Ticker(symbol)
-        fi = ticker.fast_info
+        fi = yf.Ticker(symbol).fast_info
         price = float(fi.last_price or 0)
         prev_close = float(fi.previous_close or price)
         currency = fi.currency or "TRY"
