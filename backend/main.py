@@ -984,6 +984,55 @@ def _fetch_usdtry_sync():
     t = yf.Ticker("USDTRY=X")
     return t.fast_info.last_price
 
+# Fast price-only cache (15s TTL) — for instant odometer updates
+MARKET_PRICE_CACHE = {}
+MARKET_PRICE_TTL = 15
+
+def _fetch_price_only_sync(symbol: str):
+    """Only fast_info — no chart download. Very fast (~0.3s)."""
+    ticker = yf.Ticker(symbol)
+    fi = ticker.fast_info
+    price = fi.last_price or 0
+    prev_close = fi.previous_close or price
+    currency = fi.currency or 'TRY'
+    try:    market_state = fi.market_state or 'OPEN'
+    except: market_state = 'OPEN'
+    return price, prev_close, currency, market_state
+
+@app.get("/market/price")
+async def market_price_fast(symbol: str):
+    """Lightweight price-only endpoint. Returns in ~0.3s."""
+    now = time.time()
+    # Check price cache
+    cached = MARKET_PRICE_CACHE.get(symbol)
+    if cached and (now - cached["ts"]) < MARKET_PRICE_TTL:
+        return cached["data"]
+    # Also reuse full details cache if available
+    for period in ["1d", "5d"]:
+        dk = f"{symbol}|{period}|5m"
+        dc = MARKET_DETAILS_CACHE.get(dk)
+        if dc and (now - dc["ts"]) < MARKET_DETAILS_TTL:
+            d = dc["data"]
+            result = {"symbol": symbol, "regularMarketPrice": d["regularMarketPrice"],
+                      "regularMarketPreviousClose": d["regularMarketPreviousClose"],
+                      "currency": d["currency"], "rate": d["rate"],
+                      "marketState": d.get("marketState", "OPEN")}
+            MARKET_PRICE_CACHE[symbol] = {"data": result, "ts": now}
+            return result
+    try:
+        loop = asyncio.get_event_loop()
+        price, prev_close, currency, market_state = await loop.run_in_executor(
+            None, _fetch_price_only_sync, symbol
+        )
+        result = {"symbol": symbol, "regularMarketPrice": price,
+                  "regularMarketPreviousClose": prev_close, "currency": currency,
+                  "rate": FX_CACHE["USDTRY"], "marketState": market_state}
+        MARKET_PRICE_CACHE[symbol] = {"data": result, "ts": now}
+        return result
+    except Exception as e:
+        if cached: return cached["data"]
+        return {"error": str(e), "regularMarketPrice": 0, "rate": 32.95}
+
 def _prewarm_cache(symbols_periods):
     """Called once at startup in a background thread to pre-fill cache."""
     for symbol, period, interval in symbols_periods:
@@ -1011,10 +1060,14 @@ import threading
 threading.Thread(
     target=_prewarm_cache,
     args=([
-        ("TRENJ.IS", "1d", "5m"),
-        ("BTC-USD",  "1d", "5m"),
-        ("GC=F",     "1d", "5m"),
-        ("EURTRY=X", "1d", "5m"),
+        ("TRENJ.IS",  "1d", "5m"),
+        ("BTC-USD",   "1d", "5m"),
+        ("GC=F",      "1d", "5m"),
+        ("EURTRY=X",  "1d", "5m"),
+        ("ETH-USD",   "1d", "5m"),
+        ("AAPL",      "1d", "5m"),
+        ("USDTRY=X",  "1d", "5m"),
+        ("CL=F",      "1d", "5m"),
     ],),
     daemon=True
 ).start()

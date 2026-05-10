@@ -6923,7 +6923,6 @@
             APP_STATE.activeAssetId = assetId;
 
             if (isReal) {
-                // IMMEDIATE UI UPDATE (Optimistic Load)
                 const existing = ASSETS[assetId];
                 const heroTitle = document.getElementById('hero-title');
                 if (existing) {
@@ -6934,23 +6933,16 @@
                     heroTitle.innerText = assetId.toUpperCase();
                 }
 
-                const canvas = document.getElementById('mainChart');
-                if (canvas) {
-                    canvas.style.filter = 'none';
-                    canvas.style.opacity = '1';
-                }
-
-                // ⚡ Draw instant simulated chart so canvas is never blank
+                // ⚡ Draw instant realistic simulated chart — never blank
                 const existingForChart = ASSETS[assetId];
                 if (existingForChart && existingForChart.price > 0) {
                     const basePrice = existingForChart.price;
                     const isExistingPos = !String(existingForChart.change || '+').includes('-');
-                    regenerateChart(basePrice, isExistingPos ? '#00C805' : '#ff3333', null, isExistingPos);
+                    const isCryptoAsset = assetId.includes('-USD') || assetId.includes('BTC') || assetId.includes('ETH');
+                    regenerateChart(basePrice, isExistingPos ? '#00C805' : '#ff3333', null, isExistingPos, isCryptoAsset ? 0.025 : 0.012);
+                } else {
+                    regenerateChart(100, '#00C805', null, true, 0.015);
                 }
-
-                // Only show loader if backend takes > 300ms (it often won't due to cache)
-                const loader = document.getElementById('search-loading');
-                const loaderTimer = setTimeout(() => { if (loader) loader.style.display = 'block'; }, 300);
 
                 let period = '1d';
                 let interval = '5m';
@@ -7318,22 +7310,30 @@
 
         function regenerateChart(basePrice, lineColor, shadowColor, goingUp, volatility = 0.015) {
             if (!chartInst) return;
-            let data = [];
-            let current = goingUp ? basePrice * 0.95 : basePrice * 1.05;
-            for (let i = 0; i < 100; i++) {
-                current += (Math.random() - 0.5) * (basePrice * volatility);
+            const points = 78; // ~6.5h of 5m candles
+            const data = [];
+            // Start from estimated open (opposite direction from close)
+            let current = goingUp ? basePrice * (1 - volatility * 3) : basePrice * (1 + volatility * 3);
+            const drift = (basePrice - current) / points; // Linear bias toward real price
+
+            for (let i = 0; i < points; i++) {
+                // Brownian motion + trend drift
+                const noise = (Math.random() - 0.49) * basePrice * volatility;
+                current += drift * (0.8 + Math.random() * 0.4) + noise;
+                // Keep price positive
+                if (current <= 0) current = basePrice * 0.01;
                 data.push(current);
             }
-            data[99] = basePrice;
+            // Pin last point to exact real price
+            data[data.length - 1] = basePrice;
 
             chartInst.data.labels = new Array(data.length).fill('').map((_, i) => i);
             chartInst.data.datasets[0].data = data;
             chartInst.data.datasets[0].borderColor = lineColor;
-            chartInst.update();
+            chartInst.update('none'); // 'none' = no animation, instant render
 
-            // Ensure visibility
             const canvas = document.getElementById('mainChart');
-            if (canvas) canvas.style.opacity = '1';
+            if (canvas) { canvas.style.filter = 'none'; canvas.style.opacity = '1'; }
         }
 
         // --- Spot Panel Logic ---
