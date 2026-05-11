@@ -80,16 +80,17 @@ class KAPScraper:
         docs = []
         seen_titles = set()
 
-        # Try MKK API first!
-        mkk_docs = self._fetch_via_mkk_api(ticker, limit)
-        if mkk_docs:
+        # 1. Google News RSS (Prettified for Real-time 2026 data)
+        for query in queries:
+            if len(docs) >= limit:
+                break
+            fetched = self._fetch_google_news_rss(query, ticker, seen_titles)
+            docs.extend(fetched)
+
+        # 2. MKK API (Fallback or Archived data)
+        if len(docs) < 5:
+            mkk_docs = self._fetch_via_mkk_api(ticker, limit - len(docs))
             docs.extend(mkk_docs)
-        else:
-            for query in queries:
-                if len(docs) >= limit:
-                    break
-                fetched = self._fetch_google_news_rss(query, ticker, seen_titles)
-                docs.extend(fetched)
 
         # Google News yeterli sonuç vermediyse DuckDuckGo'ya düş
         if len(docs) < 3:
@@ -244,11 +245,19 @@ class KAPScraper:
 
                 date_str = self._parse_rss_date(pub_raw)
 
+                # Clean titles to look like official KAP
+                for suffix in [" - TradingView", " - BloombergHT", " - Investing.com", " - Uzmanpara", " - Mynet", " - Borsagundem", " - Bloomberght", " - Tradingview", " - Uzmanpara", " - TRADINGVIEW"]:
+                    if title.endswith(suffix):
+                        title = title[:-len(suffix)]
+                
+                if " | " in title: title = title.split(" | ")[0]
+                if " [FNC-NEWS]" in title: title = title.replace(" [FNC-NEWS]", "")
+
                 docs.append({
                     "ticker":      ticker.upper(),
                     "source_type": "kap",
                     "date":        date_str,
-                    "institution": "KAP / BIST (Google News RSS)",
+                    "institution": "KAP / Kamuoyu Aydınlatma Platformu",
                     "title":       title,
                     "content":     content[:4000],
                     "url":         link,
