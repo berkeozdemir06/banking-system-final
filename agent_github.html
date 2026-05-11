@@ -686,7 +686,7 @@
     // ── Check API Health on load ──
     async function checkHealth() {
         try {
-            const res = await fetch(`${API_URL}/status`);
+            const res = await fetch(`${API_URL}/stats`);
             const d = await res.json();
             const badge = document.getElementById('connection-status');
             badge.innerText = 'ONLINE';
