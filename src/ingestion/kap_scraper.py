@@ -130,12 +130,15 @@ class KAPScraper:
         base_url = "https://apigwdev.mkk.com.tr/api/vyk"
         
         try:
+            # Handle MKK test API delayed ticker updates
+            mkk_ticker = "IPEKE" if ticker.upper() == "TRENJ" else ticker.upper()
+            
             # 0. Get companyId
             members_res = self.session.get(f"{base_url}/members", headers=headers, timeout=10)
             if members_res.status_code != 200: return []
             company_id = None
             for m in members_res.json():
-                if m.get("stockCode") == ticker.upper():
+                if m.get("stockCode") == mkk_ticker:
                     company_id = m.get("id")
                     break
             if not company_id: return []
