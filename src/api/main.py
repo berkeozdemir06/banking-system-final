@@ -168,8 +168,15 @@ def ingest_kap(req: IngestKAPRequest):
     if not docs:
         raise HTTPException(404, f"No KAP disclosures found for {req.ticker}")
 
-    chunks = embed_documents(docs)
-    added  = store.add_documents(chunks)
+    # Try embedding, if Nomic fails due to bad key, return gracefully
+    added = 0
+    try:
+        chunks = embed_documents(docs)
+        if chunks: added = store.add_documents(chunks)
+    except Exception as e:
+        logger.error(f"Embed/Chroma failed for KAP: {e}")
+        pass
+
     return {"ticker": req.ticker, "docs": len(docs), "chunks_added": added}
 
 
