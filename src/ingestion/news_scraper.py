@@ -85,24 +85,32 @@ class NewsScraper:
         # 2. Mynet / HTML Fallback
         if len(docs) < limit:
             docs.extend(self._fetch_via_html(ticker, limit - len(docs)))
+    def fetch_news(self, ticker: str, limit: int = 15, days_back: int = 30) -> list[dict]:
+        """Haberleri çeker - Önce Yerel Demo Verisi (Altın Paket) kontrol edilir."""
+        ticker_up = ticker.upper().strip()
+        logger.info(f"Checking for demo news for {ticker_up}")
 
-        # 3. Firecrawl (Optional Pro Path)
-        if len(docs) < limit and self.firecrawl_key:
-            docs.extend(self._fetch_via_firecrawl(ticker, limit - len(docs)))
+        # 1. Altın Paket (Demo Haber) Kontrolü
+        demo_path = f"data/demo_data/news/{ticker_up.lower()}.json"
+        if os.path.exists(demo_path):
+            try:
+                with open(demo_path, "r", encoding="utf-8") as f:
+                    logger.info(f"Loading GOLDEN PACK demo news for {ticker_up}")
+                    return json.load(f)
+            except Exception as e:
+                logger.error(f"Demo news load failed for {ticker_up}: {e}")
 
-        # Date filtering
-        cutoff = datetime.utcnow() - timedelta(days=days_back)
-        unique_docs = []
-        seen_titles = set()
+        # 2. Eğer demo haberi yoksa, Normal Google News RSS kullanılır.
+        logger.info(f"Fetching live news for {ticker_up}")
+        news = self._fetch_via_rss(ticker_up, limit)
+        
+        if not news:
+            logger.warning(f"Live news failed for {ticker_up}, using minimal fallback")
+            news = self._make_fallback(ticker_up)
 
-        for d in docs:
-            if d["title"] not in seen_titles and self._parse_date(d["date"]) >= cutoff:
-                unique_docs.append(d)
-                seen_titles.add(d["title"])
-
-        logger.info(f"Final Count: {len(unique_docs)} news articles for {ticker}")
-        self._save(ticker, unique_docs)
-        return unique_docs
+        logger.info(f"Fetched {len(news)} news articles for {ticker_up}")
+        self._save(ticker_up, news)
+        return news[:limit]
 
     # ── RSS Integration ────────────────────────────────────────────────────────
 
