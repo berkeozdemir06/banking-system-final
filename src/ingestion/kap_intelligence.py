@@ -41,8 +41,8 @@ async def get_company_data(ticker: str) -> dict:
     session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'})
     
     try:
-        stock = yf.Ticker(yf_ticker, session=session)
-        bist  = yf.Ticker(bist_ticker, session=session)
+        stock = yf.Ticker(yf_ticker)
+        bist  = yf.Ticker(bist_ticker)
         loop = asyncio.get_event_loop()
         hist_1y = await loop.run_in_executor(None, lambda: stock.history(period="1y"))
         bist_1y = await loop.run_in_executor(None, lambda: bist.history(period="1y"))

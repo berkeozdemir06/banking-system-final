@@ -181,8 +181,16 @@ def ingest_news(req: IngestNewsRequest):
 
     scraper = NewsScraper(firecrawl_api_key=os.getenv("FIRECRAWL_API_KEY"))
     docs    = scraper.fetch_news(req.ticker, limit=req.limit, days_back=req.days_back)
-    chunks  = embed_documents(docs)
-    added   = store.add_documents(chunks)
+    
+    # Try embedding, if Nomic fails due to bad key, return gracefully
+    added = 0
+    try:
+        chunks  = embed_documents(docs)
+        if chunks: added = store.add_documents(chunks)
+    except Exception as e:
+        logger.error(f"Embed/Chroma failed: {e}")
+        pass
+        
     return {"ticker": req.ticker, "docs": len(docs), "chunks_added": added}
 
 
@@ -204,8 +212,12 @@ async def ingest_pdf(
     try:
         parser = PDFParser()
         doc    = parser.parse(tmp_path, ticker=ticker, institution=institution)
-        chunks = embed_documents([doc])
-        added  = store.add_documents(chunks)
+        added = 0
+        try:
+            chunks = embed_documents([doc])
+            if chunks: added  = store.add_documents(chunks)
+        except Exception as e:
+            logger.error(f"Embed/Chroma failed for PDF: {e}")
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
