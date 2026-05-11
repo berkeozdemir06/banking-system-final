@@ -670,11 +670,25 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 # Run agent
 if run_btn and query:
-    with st.spinner("🧠 Ajan düşünüyor... (Kaynak seçimi → Retrieval → Çapraz doğrulama → Cevap üretimi)"):
+    ticker = ticker_filter.upper().strip() if ticker_filter else None
+    
+    with st.spinner(f"🔍 {ticker or 'Piyasa'} için internet araştırması yapılıyor... (KAP + Haberler)") if ticker else st.spinner("🧠 Ajan düşünüyor..."):
         try:
-            payload  = {"question": query, "ticker": ticker_filter if ticker_filter else None}
+            # ── 1. OTOMATİK İNTERNET ARAŞTIRMASI (INGESTION) ──────────────────
+            if ticker:
+                # Paralel değil, sıralı yapıyoruz ki kullanıcı ilerlemeyi görsün (veya toplu spinner)
+                try:
+                    # KAP Ingest
+                    requests.post(f"{API_URL}/ingest/kap", json={"ticker": ticker, "limit": 15}, timeout=60)
+                    # Haber Ingest
+                    requests.post(f"{API_URL}/ingest/news", json={"ticker": ticker, "limit": 15}, timeout=60)
+                except Exception as ingest_err:
+                    logger.warning(f"Otomatik araştırma hatası: {ingest_err}")
+            
+            # ── 2. RAG SORGUSU ────────────────────────────────────────────────
+            payload  = {"question": query, "ticker": ticker}
             t0       = time.time()
-            res      = requests.post(f"{API_URL}/query", json=payload, timeout=90)
+            res      = requests.post(f"{API_URL}/query", json=payload, timeout=120)
             elapsed  = time.time() - t0
 
             if res.status_code == 200:

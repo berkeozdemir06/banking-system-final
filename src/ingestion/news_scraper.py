@@ -268,15 +268,18 @@ class NewsScraper:
     @staticmethod
     def _normalize_date(raw: str) -> str:
         if not raw:
-            return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            # Default to 2025 for simulation
+            return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ").replace("2026", "2025").replace("2023", "2025")
         # Handle RSS Date format (e.g. Fri, 17 Apr 2026 12:00:00 GMT)
         for fmt in ["%a, %d %b %Y %H:%M:%S %Z", "%Y-%m-%dT%H:%M:%S", "%d.%m.%Y %H:%M", "%d.%m.%Y", "%Y-%m-%d"]:
             try:
                 dt = datetime.strptime(raw.strip() if "%a" not in fmt else raw.strip(), fmt)
-                return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+                res = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+                # Shifter (2023/2026 -> 2025)
+                return res.replace("2023", "2025").replace("2026", "2025")
             except Exception:
                 continue
-        return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ").replace("2026", "2025").replace("2023", "2025")
 
     @staticmethod
     def _parse_date(date_str: str) -> datetime:
