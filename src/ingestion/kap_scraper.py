@@ -39,18 +39,29 @@ class KAPScraper:
         self.session.headers.update(HEADERS)
 
     def fetch_disclosures(self, ticker: str, limit: int = 20) -> list[dict]:
-        """KAP bildirimlerini çeker - Sadece Resmi MKK API kullanılır."""
-        logger.info(f"Fetching official MKK disclosures for {ticker}")
+        """KAP bildirimlerini çeker - Önce Yerel Demo Verisi (Altın Paket) kontrol edilir."""
+        ticker_up = ticker.upper().strip()
+        logger.info(f"Checking for demo data for {ticker_up}")
         
-        # Sadece Resmi MKK API
-        docs = self._fetch_via_mkk_api(ticker, limit)
+        # 1. Altın Paket (Demo Verisi) Kontrolü
+        demo_path = f"data/demo_data/{ticker_up.lower()}.json"
+        if os.path.exists(demo_path):
+            try:
+                with open(demo_path, "r", encoding="utf-8") as f:
+                    logger.info(f"Loading GOLDEN PACK demo data for {ticker_up}")
+                    return json.load(f)
+            except Exception as e:
+                logger.error(f"Demo data load failed for {ticker_up}: {e}")
+
+        # 2. Eğer demo verisi yoksa, Resmi MKK API kullanılır.
+        docs = self._fetch_via_mkk_api(ticker_up, limit)
         
         if not docs:
-            logger.warning(f"Official MKK API failed for {ticker}, generating structural mock")
-            docs = self._make_fallback(ticker)
+            logger.warning(f"Official MKK API failed for {ticker_up}, generating structural mock")
+            docs = self._make_fallback(ticker_up)
 
-        logger.info(f"Fetched {len(docs)} official KAP disclosures for {ticker}")
-        self._save(ticker, docs)
+        logger.info(f"Fetched {len(docs)} official KAP disclosures for {ticker_up}")
+        self._save(ticker_up, docs)
         return docs[:limit]
 
     def _fetch_via_mkk_api(self, ticker: str, limit: int) -> list[dict]:
