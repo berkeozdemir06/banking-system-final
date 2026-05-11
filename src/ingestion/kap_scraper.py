@@ -120,6 +120,70 @@ class KAPScraper:
 
     # ── Internal Methods ──────────────────────────────────────────────────────
 
+    def _fetch_via_mkk_api(self, ticker: str, limit: int) -> list[dict]:
+        import base64
+        api_key = os.getenv("KAP_API_KEY", "917b1aeb-5b01-437e-b5af-c2866c1b09dc")
+        api_secret = os.getenv("KAP_API_SECRET", "2aefda15-da34-4fdb-9a58-fc9904d51ba6")
+        
+        b64_auth = base64.b64encode(f"{api_key}:{api_secret}".encode('utf-8')).decode('utf-8')
+        headers = {"Authorization": f"Basic {b64_auth}", "Accept": "application/json"}
+        base_url = "https://apigwdev.mkk.com.tr/api/vyk"
+        
+        try:
+            # 0. Get companyId
+            members_res = self.session.get(f"{base_url}/members", headers=headers, timeout=10)
+            if members_res.status_code != 200: return []
+            company_id = None
+            for m in members_res.json():
+                if m.get("stockCode") == ticker.upper():
+                    company_id = m.get("id")
+                    break
+            if not company_id: return []
+
+            # 1. Get last index
+            res_idx = self.session.get(f"{base_url}/lastDisclosureIndex", headers=headers, timeout=10)
+            if res_idx.status_code != 200: return []
+            last_idx = int(res_idx.json().get("lastDisclosureIndex", 0))
+            if not last_idx: return []
+            
+            # 2. Get recent disclosures (approx last 20000 index values)
+            start_idx = max(0, last_idx - 100000)
+            res_disc = self.session.get(f"{base_url}/disclosures", headers=headers, params={"disclosureIndex": str(start_idx), "companyId": str(company_id)}, timeout=15)
+            if res_disc.status_code != 200: return []
+            
+            disclosures = res_disc.json()
+            data_list = disclosures if isinstance(disclosures, list) else disclosures.get("data", [])
+            if not data_list: return []
+            
+            docs = []
+            # Reversed to get newest first
+            for item in reversed(data_list):
+                d_idx = item.get("disclosureIndex")
+                if not d_idx: continue
+                
+                detail_res = self.session.get(f"{base_url}/disclosureDetail/{d_idx}", headers=headers, params={"fileType": "html"})
+                if detail_res.status_code == 200:
+                    detail = detail_res.json()
+                    html_msgs = detail.get("htmlMessages", [{}])
+                    content_str = html_msgs[0].get("tr", "") if html_msgs else ""
+                    
+                    docs.append({
+                        "ticker": ticker.upper(),
+                        "source_type": "kap",
+                        "date": detail.get("time", datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")),
+                        "institution": "MKK KAP API",
+                        "title": item.get("title", ""),
+                        "content": content_str[:4000],
+                        "url": detail.get("link", ""),
+                        "disc_type": item.get("disclosureType", "KAP Bildirimi")
+                    })
+                    if len(docs) >= limit: break
+            return docs
+        except Exception as e:
+            logger.error(f"MKK API Error: {e}")
+            return []
+
+
     def _fetch_google_news_rss(
         self, query: str, ticker: str, seen_titles: set
     ) -> list[dict]:
@@ -284,60 +348,3 @@ if __name__ == "__main__":
         print(f"  → {d['url'][:80]}")
 
 
-    def _fetch_via_mkk_api(self, ticker: str, limit: int) -> list[dict]:
-        import base64
-        api_key = os.getenv("KAP_API_KEY")
-        if not api_key or api_key == "917b1aeb-5b01-437e-b5af-c2866c1b09dc_placeholder":
-            return []
-            
-        b64_auth = base64.b64encode(f"{api_key}:".encode('utf-8')).decode('utf-8')
-        headers = {"Authorization": f"Basic {b64_auth}", "Accept": "application/json"}
-        base_url = "https://apigwdev.mkk.com.tr/api/vyk"
-        
-        try:
-            # 1. Get last index
-            res_idx = self.session.get(f"{base_url}/lastDisclosureIndex", headers=headers, timeout=10)
-            if res_idx.status_code != 200:
-                logger.warning(f"MKK API /lastDisclosureIndex failed: {res_idx.status_code}")
-                return []
-            last_idx = int(res_idx.json().get("lastDisclosureIndex", 0))
-            if not last_idx: return []
-            
-            # 2. Get recent disclosures (approx last 20000 index values)
-            start_idx = max(0, last_idx - 20000)
-            res_disc = self.session.get(f"{base_url}/disclosures", headers=headers, params={"disclosureIndex": str(start_idx)}, timeout=15)
-            if res_disc.status_code != 200: return []
-            
-            disclosures = res_disc.json()
-            data_list = disclosures if isinstance(disclosures, list) else disclosures.get("data", [])
-            if not data_list: return []
-            
-            docs = []
-            # Reversed to get newest first
-            for item in reversed(data_list):
-                # Filter by ticker (stockCode or companyId)
-                if ticker.upper() in str(item).upper():
-                    d_idx = item.get("disclosureIndex")
-                    if not d_idx: continue
-                    
-                    detail_res = self.session.get(f"{base_url}/disclosureDetail/{d_idx}", headers=headers, params={"fileType": "html"})
-                    if detail_res.status_code == 200:
-                        detail = detail_res.json()
-                        html_msgs = detail.get("htmlMessages", [{}])
-                        content_str = html_msgs[0].get("tr", "") if html_msgs else ""
-                        
-                        docs.append({
-                            "ticker": ticker.upper(),
-                            "source_type": "kap",
-                            "date": detail.get("time", datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")),
-                            "institution": "MKK KAP API",
-                            "title": item.get("title", ""),
-                            "content": content_str[:4000],
-                            "url": detail.get("link", ""),
-                            "disc_type": item.get("disclosureType", "KAP Bildirimi")
-                        })
-                        if len(docs) >= limit: break
-            return docs
-        except Exception as e:
-            logger.error(f"MKK API Error: {e}")
-            return []
