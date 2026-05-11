@@ -168,8 +168,26 @@ class KAPScraper:
                 if detail_res.status_code == 200:
                     detail = detail_res.json()
                     html_msgs = detail.get("htmlMessages", [{}])
-                    content_str = html_msgs[0].get("tr", "") if html_msgs else ""
+                    encoded_str = html_msgs[0].get("tr", "") if html_msgs else ""
                     
+                    content_str = encoded_str
+                    if encoded_str:
+                        try:
+                            decoded_bytes = base64.b64decode(encoded_str)
+                            # MKK XML/HTML is usually ISO-8859-9 (Turkish)
+                            try:
+                                decoded_str = decoded_bytes.decode('iso-8859-9', errors='ignore')
+                            except Exception:
+                                decoded_str = decoded_bytes.decode('utf-8', errors='ignore')
+                            
+                            # extract plain text
+                            from bs4 import BeautifulSoup
+                            soup = BeautifulSoup(decoded_str, "html.parser")
+                            content_str = soup.get_text(separator=" ", strip=True)
+                        except Exception as e:
+                            logger.error(f"Base64 decode failed for index {d_idx}: {e}")
+                            content_str = encoded_str
+
                     docs.append({
                         "ticker": ticker.upper(),
                         "source_type": "kap",
