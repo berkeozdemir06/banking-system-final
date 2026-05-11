@@ -136,7 +136,7 @@ class KAPScraper:
                         "ticker": ticker.upper(),
                         "title": item.get("disclosureTitle", "Official Disclosure"),
                         "content": clean_content,
-                        "date": item.get("disclosureDate", "").replace("2023", "2025").replace("2026", "2025"),
+                        "date": item.get("disclosureDate", ""),
                         "source_type": "KAP",
                         "url": f"https://www.kap.org.tr/tr/Bildirim/{d_idx}"
                     })

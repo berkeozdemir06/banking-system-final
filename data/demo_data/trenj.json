@@ -1,15 +1,17 @@
 [
   {
     "ticker": "TRENJ",
-    "date": "2025-05-11T10:00:00Z",
+    "date": "2026-05-11T10:00:00Z",
     "title": "Esas Sözleşme Tadili Hakkında / Amendment of Articles",
-    "content": "Şirketimiz Yönetim Kurulu tarafından, global enerji trendlerine uyum sağlamak amacıyla Esas Sözleşme'nin 3. maddesinde yer alan 'Amaç ve Konu' kısmına yenilenebilir enerji yatırımları ve teknoloji geliştirme faaliyetlerinin eklenmesine karar verilmiştir. Bu değişiklik ile İpek Enerji'nin yeşil enerji dönüşümü stratejisi resmileşmiştir.",
+    "content": "Yenilenebilir enerji yatırımları ve teknoloji geliştirme faaliyetlerinin eklenmesine karar verilmiştir. Bu değişiklik ile İpek Enerji'nin yeşil enerji dönüşümü stratejisi resmileşmiştir.",
+    "price_change_pct": 2.10,
+    "bist_change_pct": 0.45,
     "source_type": "KAP",
     "url": "https://www.kap.org.tr/tr/Bildirim/trenj-demo-1"
   },
   {
     "ticker": "TRENJ",
-    "date": "2025-05-08T14:30:00Z",
+    "date": "2026-05-08T14:30:00Z",
     "title": "Devam Eden Davalar Hakkında Bilgilendirme",
     "content": "ATP Marin Inc. tarafından açılan ve istinaf aşamasında olan dava ile ilgili olarak, yerel mahkemenin şirketimiz lehine verdiği kararın onandığı bilgisi alınmıştır. Söz konusu dava süreci şirketimiz lehine sonuçlanma eğilimindedir ve finansal tablolarımız üzerinde herhangi bir risk öngörülmemektedir.",
     "source_type": "KAP",
@@ -17,15 +19,15 @@
   },
   {
     "ticker": "TRENJ",
-    "date": "2025-04-24T16:00:00Z",
+    "date": "2026-04-24T16:00:00Z",
     "title": "Mahkeme Kararı ve Duruşma Tarihi",
-    "content": "Ankara 24. Ağır Ceza Mahkemesi'nde devam eden dosya kapsamında, bir sonraki duruşma tarihinin 18 Eylül 2025 olarak belirlendiği öğrenilmiştir. Şirket faaliyetlerimiz rutin işleyişine devam etmektedir.",
+    "content": "Ankara 24. Ağır Ceza Mahkemesi'nde devam eden dosya kapsamında, bir sonraki duruşma tarihinin 18 Eylül 2026 olarak belirlendiği öğrenilmiştir. Şirket faaliyetlerimiz rutin işleyişine devam etmektedir.",
     "source_type": "KAP",
     "url": "https://www.kap.org.tr/tr/Bildirim/trenj-demo-3"
   },
   {
     "ticker": "TRENJ",
-    "date": "2025-03-11T09:15:00Z",
+    "date": "2026-03-11T09:15:00Z",
     "title": "Yatırımcı İlişkileri Bölüm Müdürü Ataması",
     "content": "Sermaye Piyasası Kurulu tebliğleri doğrultusunda, şirketimiz Yatırımcı İlişkileri Bölüm Müdürlüğü görevine Sayın Arzu Ünal atanmıştır. Kendisi aynı zamanda Kurumsal Yönetim Komitesi üyesi olarak görev yapacaktır.",
     "source_type": "KAP",
@@ -33,9 +35,9 @@
   },
   {
     "ticker": "TRENJ",
-    "date": "2025-03-09T17:45:00Z",
-    "title": "2025 Sürdürülebilirlik Uyum Raporu",
-    "content": "İpek Enerji 2025 Sürdürülebilirlik Raporu yayınlanmıştır. Şirketimiz enerji üretiminde karbon nötr hedeflerine yönelik yatırımlarını %25 artırmıştır. Sosyal sorumluluk projeleri kapsamında bölge halkına yönelik eğitim destekleri sürdürülmüştür.",
+    "date": "2026-03-09T17:45:00Z",
+    "title": "2026 Sürdürülebilirlik Uyum Raporu",
+    "content": "İpek Enerji 2026 Sürdürülebilirlik Raporu yayınlanmıştır. Şirketimiz enerji üretiminde karbon nötr hedeflerine yönelik yatırımlarını %25 artırmıştır. Sosyal sorumluluk projeleri kapsamında bölge halkına yönelik eğitim destekleri sürdürülmüştür.",
     "source_type": "KAP",
     "url": "https://www.kap.org.tr/tr/Bildirim/trenj-demo-5"
   }

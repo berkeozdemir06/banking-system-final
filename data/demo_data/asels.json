@@ -1,39 +1,43 @@
 [
   {
     "ticker": "ASELS",
-    "date": "2025-03-16T08:59:00Z",
+    "date": "2026-03-16T08:59:00Z",
     "title": "Yeni İş İlişkisi / New Business Relationship",
-    "content": "ASELSAN ile uluslararası bir müşteri arasında, savunma sistemleri ihracatına yönelik toplam bedeli 124.500.000 ABD Doları tutarında bir yurt dışı satış sözleşmesi imzalanmıştır. Söz konusu sözleşme kapsamında teslimatların 2025-2027 yılları arasında gerçekleştirilmesi planlanmaktadır. Şirketimizin 2025 yılı ciro hedeflerine pozitif katkı sağlaması beklenmektedir.",
+    "content": "ASELSAN ile uluslararası bir müşteri arasında, savunma sistemleri ihracatına yönelik toplam bedeli 124.500.000 ABD Doları tutarında bir yurt dışı satış sözleşmesi imzalanmıştır.",
+    "price_change_pct": 3.45,
+    "bist_change_pct": 0.82,
     "source_type": "KAP",
     "url": "https://www.kap.org.tr/tr/Bildirim/asels-demo-1"
   },
   {
     "ticker": "ASELS",
-    "date": "2025-02-24T18:37:00Z",
+    "date": "2026-02-24T18:37:00Z",
     "title": "Geleceğe Dönük Değerlendirmeler / Future Outlook",
-    "content": "ASELSAN 2025 yılına ilişkin beklentilerini açıklamıştır: Konsolide gelirlerin %40-%50 oranında artması, EBITDA marjının %24-%26 seviyesinde gerçekleşmesi ve yatırım harcamalarının 450 Milyon USD seviyesinde olması öngörülmektedir. Şirketimiz AR-GE odaklı büyüme stratejisini sürdürecektir.",
+    "content": "ASELSAN 2026 yılına ilişkin beklentilerini açıklamıştır: Konsolide gelirlerin %40-%50 oranında artması öngörülmektedir.",
+    "price_change_pct": 1.20,
+    "bist_change_pct": -0.15,
     "source_type": "KAP",
     "url": "https://www.kap.org.tr/tr/Bildirim/asels-demo-2"
   },
   {
     "ticker": "ASELS",
-    "date": "2025-02-24T18:27:00Z",
-    "title": "2025 Yılı Faaliyet Raporu (Konsolide)",
-    "content": "ASELSAN'ın 2025 yılı faaliyet raporu yayınlanmıştır. Şirketimiz yılı rekor sipariş bakiyesi olan 12.4 Milyar USD ile kapatmıştır. Net kâr bir önceki yıla göre %35 artış göstererek sürdürülebilir büyüme ivmesini korumuştur. Savunma elektroniği ve sivil teknolojiler alanında pazar payımız artmıştır.",
+    "date": "2026-02-24T18:27:00Z",
+    "title": "2026 Yılı Faaliyet Raporu (Konsolide)",
+    "content": "ASELSAN'ın 2026 yılı faaliyet raporu yayınlanmıştır. Şirketimiz yılı rekor sipariş bakiyesi olan 12.4 Milyar USD ile kapatmıştır. Net kâr bir önceki yıla göre %35 artış göstererek sürdürülebilir büyüme ivmesini korumuştur. Savunma elektroniği ve sivil teknolojiler alanında pazar payımız artmıştır.",
     "source_type": "KAP",
     "url": "https://www.kap.org.tr/tr/Bildirim/asels-demo-3"
   },
   {
     "ticker": "ASELS",
-    "date": "2025-02-24T18:27:00Z",
-    "title": "Sürdürülebilirlik Uyum Raporu 2025",
-    "content": "2025 yılı Sürdürülebilirlik Raporu'na göre karbon emisyonlarımız %15 azaltılmış, yenilenebilir enerji kullanımı %60 seviyesine çıkarılmıştır. ESG skorlarımız uluslararası endekslerde 'AA' seviyesine yükselmiştir.",
+    "date": "2026-02-24T18:27:00Z",
+    "title": "Sürdürülebilirlik Uyum Raporu 2026",
+    "content": "2026 yılı Sürdürülebilirlik Raporu'na göre karbon emisyonlarımız %15 azaltılmış, yenilenebilir enerji kullanımı %60 seviyesine çıkarılmıştır. ESG skorlarımız uluslararası endekslerde 'AA' seviyesine yükselmiştir.",
     "source_type": "KAP",
     "url": "https://www.kap.org.tr/tr/Bildirim/asels-demo-4"
   },
   {
     "ticker": "ASELS",
-    "date": "2025-02-15T11:00:00Z",
+    "date": "2026-02-15T11:00:00Z",
     "title": "İhale Kazanılması Hakkında",
     "content": "Savunma Sanayii Başkanlığı tarafından açılan Akıllı Mühimmat Sistemleri ihalesi 850 Milyon TL bedel ile şirketimiz uhdesinde kalmıştır. Sözleşme imza süreci devam etmektedir.",
     "source_type": "KAP",
