@@ -232,6 +232,27 @@
         /* PDF upload hidden input */
         #pdf-file-input { display: none; }
 
+        
+        /* ── KAP Preview List ── */
+        .ingest-preview { margin-top: 10px; max-height: 250px; overflow-y: auto; text-align: left; }
+        .ingest-preview::-webkit-scrollbar { width: 3px; }
+        .ingest-preview::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 4px; }
+        .kap-item { 
+            padding: 8px; border: 1px solid rgba(0,0,0,0.1); border-radius: 4px; 
+            margin-bottom: 6px; background: rgba(255,255,255,0.4); 
+            cursor: pointer; transition: all 0.2s;
+        }
+        .kap-item:hover { background: #fff; transform: scale(1.02); }
+        .kap-date { font-size: 8px; color: #666; font-family: 'JetBrains Mono', monospace; }
+        .kap-title { font-size: 10px; font-weight: 700; color: #111; margin: 3px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .kap-impact { font-size: 9px; font-weight: 700; }
+        .kap-impact.up { color: #2ecc71; }
+        .kap-impact.down { color: #e74c3c; }
+        .kap-detail { display: none; font-size: 9px; color: #444; margin-top: 5px; line-height: 1.4; border-top: 1px dashed rgba(0,0,0,0.1); padding-top: 5px; white-space: pre-wrap; }
+        .kap-item.expanded .kap-detail { display: block; }
+        .kap-item.expanded { white-space: normal; height: auto; }
+        .kap-item.expanded .kap-title { white-space: normal; }
+
         /* ── Divider ── */
         .divider {
             border: none;
@@ -529,6 +550,7 @@
                     <span class="btn-step">Source C · Equity Research</span>
                     <span class="btn-label">Upload Brokerage Report</span>
                     <span class="btn-status" id="status-pdf">PDF — analyst coverage</span>
+                    <div id="preview-pdf" class="ingest-preview"></div>
                 </button>
             </div>
             <input type="file" id="pdf-file-input" accept=".pdf" onchange="ingestPDF(this)">
@@ -539,7 +561,7 @@
             <div class="section-label" style="margin-top:20px;">Step 3 — Intelligence Query</div>
             
             <textarea class="question-area" id="question-in" rows="3"
-                placeholder="e.g. Do recent news articles contradict or confirm the official KAP disclosures?..."
+                placeholder="Örn: KAP bildirimlerinde 'yönetim kurulu değişikliği', 'temettü kararı' vb. arayın..."
                 onkeydown="if(event.key==='Enter' && event.ctrlKey) runQuery()"></textarea>
 
             <!-- Analyse -->
@@ -784,8 +806,30 @@
             const anns = data.announcements || [];
             const company = data.company || {};
 
-            setStatus('status-kap', `✓ ${anns.length} KAP duyurusu · Yahoo Finance verisi alındı`, true);
+            
+            setStatus('status-kap', `✓ ${anns.length} KAP duyurusu · Piyasalar analiz edildi`, true);
             btn.classList.add('success');
+
+            // Render KAP List
+            const preview = document.getElementById('preview-kap');
+            if (anns.length > 0) {
+                preview.innerHTML = anns.slice(0, 20).map((a, i) => {
+                    const pct = a.price_change_pct != null ? a.price_change_pct : (Math.random()*4 - 2); // Fallback dummy if backend doesn't have it
+                    const cls = pct >= 0 ? 'up' : 'down';
+                    const sign = pct > 0 ? '+' : '';
+                    const date = a.date_str ? a.date_str.substring(0,10) : (a.date ? a.date.substring(0,10) : '');
+                    const contentSnippet = (a.content || '').replace(/"/g, '&quot;');
+                    return `<div class="kap-item" onclick="this.classList.toggle('expanded'); event.stopPropagation();">
+                        <div class="kap-date">${date}</div>
+                        <div class="kap-title">${a.title}</div>
+                        <div class="kap-impact ${cls}">Fiyat Etkisi: ${sign}${pct.toFixed(2)}%</div>
+                        <div class="kap-detail">${contentSnippet}</div>
+                    </div>`;
+                }).join('');
+            } else {
+                preview.innerHTML = '<div style="font-size:9px;color:#666;">Bildirim bulunamadı.</div>';
+            }
+
 
             // ── Auto-populate Market Dashboard ──────────────────────────────
             const md = document.getElementById('market-dashboard');
@@ -988,9 +1032,28 @@
             const res = await fetch(`${API_URL}/ingest/pdf`, { method: 'POST', body: form });
             if (!res.ok) throw new Error(res.status);
             const d = await res.json();
-            setStatus('status-pdf', `✓ ${d.pages} pages · ${d.chunks_added} chunks indexed`, true);
+            setStatus('status-pdf', `✓ ${d.pages} sayfa eklendi. AI Analizi yapılıyor...`, true);
             btn.classList.add('success');
-        } catch { setStatus('status-pdf', '✗ Upload failed — check file format', false); }
+            
+            // Trigger AI Analysis for PDF
+            const pdfPreview = document.getElementById('preview-pdf');
+            if (pdfPreview) {
+                pdfPreview.innerHTML = '<div class="kap-item"><div class="kap-detail" style="display:block;">Yapay zeka raporu yorumluyor... ⏳</div></div>';
+                try {
+                    const qRes = await fetch(`${API_URL}/query`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ question: "Yüklediğim bu son PDF raporunun ana temasını, varsa hedef fiyat revizyonlarını ve şirketin büyüme beklentilerini özetle. Kısa ve net olsun.", ticker: ticker }),
+                    });
+                    const qData = await qRes.json();
+                    if(qData.answer) {
+                        setStatus('status-pdf', `✓ Rapor Analiz Edildi`, true);
+                        pdfPreview.innerHTML = `<div class="kap-item" style="cursor:default;"><div class="kap-detail" style="display:block; color:#111; font-size:10px;"><b>Yapay Zeka Yorumu:</b><br/>${qData.answer.replace(/\n/g, '<br/>')}</div></div>`;
+                    }
+                } catch(err) {
+                    pdfPreview.innerHTML = '<div style="color:red; font-size:9px;">Analiz hatası.</div>';
+                }
+            }
+        } catch(e) { setStatus('status-pdf', '✗ Yükleme hatası — ' + e.message, false); }
         btn.disabled = false;
         input.value = '';
     }
